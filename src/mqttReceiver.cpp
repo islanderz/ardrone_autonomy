@@ -6,7 +6,7 @@
 /****************************/
 
 #define ADDRESS     "tcp://unmand.io:1884"
-#define CLIENTID    "ROSSubscriber"
+#define CLIENTID    "mqttReceiver"
 #define QOS         1
 #define TIMEOUT     10000L
 
@@ -36,8 +36,8 @@ void connlost(void *context, char *cause)
 	conn_opts.cleansession = 1;
 	if ((rc = MQTTAsync_connect(client, &conn_opts)) != MQTTASYNC_SUCCESS)
 	{
-		ROS_INFO("Failed to start connect, return code %d\n", rc);
-	    finished = 1;
+	  ROS_INFO("Failed to start connect, return code %d\n", rc);
+	  finished = 1;
 	}
 }
 
@@ -113,7 +113,7 @@ void chatterCallback(const std_msgs::String::ConstPtr& msg)
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "listener");
+  ros::init(argc, argv, "mqttReceiver");
   ros::NodeHandle n;
   ros::Subscriber sub = n.subscribe("chatter", 1000, chatterCallback);
 
@@ -160,17 +160,14 @@ int main(int argc, char **argv)
   if ((rc = MQTTAsync_subscribe(client, topic1, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
 	{
 		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-//		exit(-1);	
 	}
   if ((rc = MQTTAsync_subscribe(client, topic2, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
 	{
 		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-//		exit(-1);	
 	}
   if ((rc = MQTTAsync_subscribe(client, topic3, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
 	{
 		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-//		exit(-1);	
 	}
 
   ros::Rate loop_rate(10);
@@ -180,7 +177,7 @@ int main(int argc, char **argv)
   while(ros::ok())
   {
   //  ROS_INFO("Inside loop. All seems to be good.\n");
-  //  loop_rate.sleep();
+    loop_rate.sleep();
   //  ++count;
   }
 

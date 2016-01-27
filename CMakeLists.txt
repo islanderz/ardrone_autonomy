@@ -140,6 +140,12 @@ target_link_libraries(
 
 add_dependencies(ardrone_driver ardronelib ${PROJECT_NAME}_gencpp)
 
+
+add_executable(mqttReceiver src/mqttReceiver.cpp)
+target_link_libraries(mqttReceiver ${catkin_LIBRARIES} /usr/local/lib/libpaho-mqtt3a.so.1)
+
+
+
 # roslint
 set(ROSLINT_CPP_OPTS "--filter=-runtime/references-runtime/threadsafe_fn")
 roslint_cpp(${AA_HEADERS} ${AA_SOURCES})

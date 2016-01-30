@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "MQTTAsync.h"
+#include "zlib.h"
 
 
 /****************************/
@@ -44,24 +45,44 @@ void connlost(void *context, char *cause)
 
 int msgarrvd(void *context, char *topicName, int topicLen, MQTTAsync_message *message)
 {
-    int i;
-    char* payloadptr;
+  //we have received a compressed image stream and need to decompress it
+  if(strcmp(topicName,"image/compressedImageStream") == 0)
+  {
+    int MAX_MSG_SIZE = 50000;//this value should be updated and stored as a global variable. Or hardcoded if we know the max size.
+    uint8_t* imgData;
+    unsigned long uncompSize;
+    imgData = (uint8_t*)malloc(MAX_MSG_SIZE);
+    uncompress(imgData, 
+        &uncompSize, 
+        (uint8_t*)message->payload, 
+        message->payloadlen);
 
-    ROS_INFO("Received message of length %d on topic %s\n",message->payloadlen,topicName);
-    
-    ROS_INFO("Message arrived\n");
-    ROS_INFO("     topic: %s\n", topicName);
-    ROS_INFO("   message: ");
-
-    payloadptr = (char*)message->payload;
-    for(i=0; i<message->payloadlen; i++)
-    {
-        putchar(*payloadptr++);
-    }
-    putchar('\n');
+    printf("Received image with %d bytes, uncompressed to %ld bytes\n",message->payloadlen, uncompSize);
+   // printf("Message is: %s\n",(char*)imgData);
     MQTTAsync_freeMessage(&message);
     MQTTAsync_free(topicName);
     return 1;
+  }
+
+
+  int i;
+  char* payloadptr;
+
+  ROS_INFO("Received message of length %d on topic %s\n",message->payloadlen,topicName);
+
+  ROS_INFO("Message arrived\n");
+  ROS_INFO("     topic: %s\n", topicName);
+  ROS_INFO("   message: ");
+
+  payloadptr = (char*)message->payload;
+  for(i=0; i<message->payloadlen; i++)
+  {
+    putchar(*payloadptr++);
+  }
+  putchar('\n');
+  MQTTAsync_freeMessage(&message);
+  MQTTAsync_free(topicName);
+  return 1;
 }
 
 
@@ -147,7 +168,7 @@ int main(int argc, char **argv)
 	
   char topic1[] = "navdata/altd";
   char topic2[] = "navdata/orientation";
-  char topic3[] = "image/imagestream";
+  char topic3[] = "image/compressedImageStream";//image/imagestream";
   
 
 	MQTTAsync_responseOptions subs_opts = MQTTAsync_responseOptions_initializer;

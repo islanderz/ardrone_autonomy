@@ -71,6 +71,7 @@ int msgarrvd(void *context, char *topicName, int topicLen, MQTTAsync_message *me
 
     obj = binn_open(message->payload);
 
+    uint32_t timestamp = binn_object_uint32(obj,"timestamp");
     uint16_t tag = binn_object_uint16(obj, "tag");
     uint16_t size = binn_object_uint16(obj, "size");
     uint32_t ctrl_state = binn_object_uint32(obj, "ctrl_state");

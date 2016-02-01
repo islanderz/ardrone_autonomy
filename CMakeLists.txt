@@ -142,7 +142,7 @@ add_dependencies(ardrone_driver ardronelib ${PROJECT_NAME}_gencpp)
 
 
 add_executable(mqttReceiver src/mqttReceiver.cpp)
-target_link_libraries(mqttReceiver ${catkin_LIBRARIES} /usr/local/lib/libpaho-mqtt3a.so.1 -lz)
+target_link_libraries(mqttReceiver ${catkin_LIBRARIES} -lpaho-mqtt3a -lz -lbinn)
 
 
 

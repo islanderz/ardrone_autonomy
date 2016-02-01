@@ -2,6 +2,9 @@
 #include "std_msgs/String.h"
 #include "MQTTAsync.h"
 #include "zlib.h"
+extern "C" {
+#include "binn.h"
+}
 
 
 /****************************/
@@ -61,6 +64,23 @@ int msgarrvd(void *context, char *topicName, int topicLen, MQTTAsync_message *me
    // printf("Message is: %s\n",(char*)imgData);
     MQTTAsync_freeMessage(&message);
     MQTTAsync_free(topicName);
+    return 1;
+  }
+  if(strcmp(topicName,"uas/ardrone1/navdata") == 0)
+  {
+    binn* obj;
+
+    obj = binn_open(message->payload);
+
+    float theta,psi,phi;
+
+    theta = binn_object_float(obj, "orientation/theta");
+    psi = binn_object_float(obj, "orientation/psi");
+    phi = binn_object_float(obj, "orientation/phi");
+
+    printf("Received navdata msg with: %f %f %f\n", theta, psi, phi);
+
+    binn_free(obj);
     return 1;
   }
 
@@ -136,6 +156,18 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "mqttReceiver");
   ros::NodeHandle n;
+
+  /*********
+  std::string aa;
+  float amin = 0.0;
+  std::vector<std::string> myvec;
+  ros::param::get("/mqttReceiver/myparam",aa);
+  ros::param::get("/mqttReceiver/altitude_min",amin);
+  ros::param::get("/mqttReceiver/listTopics",myvec);
+  std::cout << myvec.size() << std::endl;
+  std::cout << "string: " << aa << std::endl;
+  std::cout << "num: " << amin << std::endl;
+  **********/
   ros::Subscriber sub = n.subscribe("chatter", 1000, chatterCallback);
 
   MQTTAsync client;
@@ -166,30 +198,28 @@ int main(int argc, char **argv)
     printf("Waiting to connect...\n");
   }
 	
-  char topic1[] = "navdata/altd";
-  char topic2[] = "navdata/orientation";
-  char topic3[] = "image/compressedImageStream";//image/imagestream";
+  std::vector<std::string> topicsList;
+  ros::param::get("/mqttReceiver/topicsList",topicsList);
+
+ // char topic1[] = "navdata/altd";
+ // char topic2[] = "navdata/orientation";
+ // char topic3[] = "image/compressedImageStream";//image/imagestream";
   
 
 	MQTTAsync_responseOptions subs_opts = MQTTAsync_responseOptions_initializer;
-	ROS_INFO("Subscribing to topics...");
+	ROS_INFO("Subscribing to %d topics...", topicsList.size());
 	subs_opts.onSuccess = onSubscribe;
 	subs_opts.onFailure = onSubscribeFailure;
 	subs_opts.context = client;
 
-	//deliveredtoken = 0;
-  if ((rc = MQTTAsync_subscribe(client, topic1, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
-	{
-		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-	}
-  if ((rc = MQTTAsync_subscribe(client, topic2, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
-	{
-		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-	}
-  if ((rc = MQTTAsync_subscribe(client, topic3, QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
-	{
-		ROS_INFO("Failed to start subscribe, return code %d\n", rc);
-	}
+  //subscripe to all topics in the param listTopics
+  for(int i = 0; i < topicsList.size(); i++)
+  {
+    if ((rc = MQTTAsync_subscribe(client, topicsList[i].c_str(), QOS, &subs_opts)) != MQTTASYNC_SUCCESS)
+    {
+      ROS_INFO("Failed to start subscribe, return code %d\n", rc);
+    }
+  }
 
   ros::Rate loop_rate(10);
 

@@ -9,7 +9,6 @@ extern "C" {
 
 /****************************/
 
-#define ADDRESS     "tcp://unmand.io:1884"
 #define CLIENTID    "mqttReceiver"
 #define QOS         1
 #define TIMEOUT     10000L
@@ -190,8 +189,17 @@ int main(int argc, char **argv)
   MQTTAsync_token token;
   int rc;
   int ch;
+  
+  std::string broker = "tcp://unmand.io";
+  std::string brokerPort = "1884";
+  ros::param::get("/mqttReceiver/mqttBroker",broker);
+  ros::param::get("/mqttReceiver/mqttBrokerPort",brokerPort);
 
-  MQTTAsync_create(&client, ADDRESS, CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
+  std::string address = broker + ":" + brokerPort;
+
+  ROS_INFO("Connecting to ... %s", address.c_str());
+  
+  MQTTAsync_create(&client, address.c_str(), CLIENTID, MQTTCLIENT_PERSISTENCE_NONE, NULL);
 
   MQTTAsync_setCallbacks(client, NULL, connlost, msgarrvd, NULL);
 
@@ -208,7 +216,6 @@ int main(int argc, char **argv)
   while(!connected)
   {
     sleep(10);
-    printf("Waiting to connect...\n");
   }
 	
   std::vector<std::string> topicsList;

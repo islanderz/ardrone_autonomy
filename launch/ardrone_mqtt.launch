@@ -8,7 +8,8 @@
   <arg name="freq" default="8" />
     <node name="mqttReceiver" pkg="ardrone_autonomy" type="mqttReceiver"
           output="screen" clear_params="true" args="-ip $(arg ip)">
-        <param name="myparam" value="HelloTiusfkjasdf" />
+        <param name="mqttBroker" value="tcp://unmand.io" />
+        <param name="mqttBrokerPort" value="1884" />
         <rosparam param="topicsList">["uas/ardrone1/navdata", "ardrone/orientation", "image/compressedImageStream"]</rosparam>
         <param name="outdoor" value="0" />
         <param name="max_bitrate" value="4000" />

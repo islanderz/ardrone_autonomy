@@ -126,55 +126,45 @@ class callback : public virtual mqtt::callback,
       binn* obj;
 
       obj = binn_open((void*)(msg->get_payload()).data());
+      
+      ardrone_autonomy::Navdata navMsg;
+      navMsg.header.stamp = ros::Time::now();
 
-      uint32_t vbat_flying_percentage = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
+      navMsg.batteryPercent = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
       uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
-      int32_t pressure = binn_object_uint32(obj, (char*)"pressure");
-      float theta = binn_object_float(obj, (char*)"theta");
-      float phi = binn_object_float(obj, (char*)"phi");
-      float psi = binn_object_float(obj, (char*)"psi");
-      uint32_t altitude = binn_object_uint32(obj, (char*)"altitude");
-      float vx = binn_object_float(obj, (char*)"vx");
-      float vy = binn_object_float(obj, (char*)"vy");
-      float vz = binn_object_float(obj, (char*)"vz");
-      uint32_t motor1 = binn_object_uint32(obj, (char*)"motor1");
-      uint32_t motor2 = binn_object_uint32(obj, (char*)"motor2");
-      uint32_t motor3 = binn_object_uint32(obj, (char*)"motor3");
-      uint32_t motor4 = binn_object_uint32(obj, (char*)"motor4");
-      uint32_t tm = binn_object_uint32(obj, (char*)"tm");
+      navMsg.state = ctrl_state >> 16;
 
-      printf("Received navdata msg with angles: %f %f %f\n", theta, phi, psi);
-      printf("Received navdata msg with velocities: %f %f %f\n", vx, vy, vz);
-      printf("Received navdata msg with battery/ctrl_state/altd: %d/%d/%d\n", vbat_flying_percentage, ctrl_state, altitude);
-      printf("\n");
+      int32_t pressure = binn_object_uint32(obj, (char*)"pressure");
+      navMsg.rotX = (binn_object_float(obj, (char*)"phi")) / 1000.0;
+      navMsg.rotY = (binn_object_float(obj, (char*)"theta")) / 1000.0;
+      navMsg.rotZ = (binn_object_float(obj, (char*)"psi")) / 1000.0;
+      navMsg.altd = binn_object_uint32(obj, (char*)"altitude");
+      navMsg.vx = binn_object_float(obj, (char*)"vx");
+      navMsg.vy = -1*binn_object_float(obj, (char*)"vy");
+      navMsg.vz = -1*binn_object_float(obj, (char*)"vz");
+      navMsg.motor1 = binn_object_uint32(obj, (char*)"motor1");
+      navMsg.motor2 = binn_object_uint32(obj, (char*)"motor2");
+      navMsg.motor3 = binn_object_uint32(obj, (char*)"motor3");
+      navMsg.motor4 = binn_object_uint32(obj, (char*)"motor4");
+      uint32_t tm = binn_object_uint32(obj, (char*)"tm");
+      navMsg.tm = (tm & 0x001FFFFF) + (tm >> 21) * 1000000;
+      navdataPub_.publish(navMsg);
+      
+      binn_free(obj);
+
+      //printf("Received navdata msg with angles: %f %f %f\n", theta, phi, psi);
+      //printf("Received navdata msg with velocities: %f %f %f\n", vx, vy, vz);
+      //printf("Received navdata msg with battery/ctrl_state/altd: %d/%d/%d\n", vbat_flying_percentage, ctrl_state, altitude);
+      printf("Received a Navdata msg over MQTT. Sending it out as a msg on ROS Topic.\n");
 
       //NEED TO PUBLISH ON ROS TOPICS HERE
 
       //conversions from ardrone_driver.cpp
-      ardrone_autonomy::Navdata navMsg;
 
-      navMsg.header.stamp = ros::Time::now();
-      navMsg.batteryPercent = vbat_flying_percentage;
-      navMsg.state = ctrl_state >> 16;
 
       // positive means counterclockwise rotation around axis
-      navMsg.rotX = phi / 1000.0;  // tilt left/right
-      navMsg.rotY = theta / 1000.0;  // tilt forward/backward
-      navMsg.rotZ = psi / 1000.0;  // orientation
 
-      navMsg.altd = altitude;  // cm
-      navMsg.vx = vx;  // mm/sec
-      navMsg.vy = -vy;  // mm/sec
-      navMsg.vz = -vz;  // mm/sec
-      navMsg.motor1 = motor1;
-      navMsg.motor2 = motor2;
-      navMsg.motor3 = motor3;
-      navMsg.motor4 = motor4;
-      navMsg.tm = (tm & 0x001FFFFF) + (tm >> 21) * 1000000;
 
-      navdataPub_.publish(navMsg);
-
-      binn_free(obj);
       return;
     }
 		//std::cout << "\t'" << msg->to_str() << "'\n" << std::endl;

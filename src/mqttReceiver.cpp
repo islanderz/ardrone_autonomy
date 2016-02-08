@@ -101,14 +101,26 @@ class callback : public virtual mqtt::callback,
 		reconnect();
 	}
 
-	// Re-connection success
-	virtual void on_success(const mqtt::itoken& tok) {
-		std::cout << "Reconnection success" << std::endl;;
-		cli_.subscribe("hello", QOS, nullptr, listener_);
-	}
+  // Re-connection success
+  virtual void on_success(const mqtt::itoken& tok) {
+    std::cout << "Reconnection success" << std::endl;;
+    cli_.subscribe("hello", QOS, nullptr, listener_);
+    std::vector<std::string> topicsList;
+    ros::param::get("/mqttReceiver/topicsList",topicsList);
+    for(int i =0 ; i < topicsList.size(); i++)
+    {
 
-	virtual void connection_lost(const std::string& cause) {
-		std::cout << "\nConnection lost" << std::endl;
+      std::cout << "Subscribing to topic " << topicsList[i] << "\n"
+        << "for client " << CLIENTID
+        << " using QoS" << QOS << "\n\n"
+        << "Press Q<Enter> to quit\n" << std::endl;
+
+      cli_.subscribe(topicsList[i].c_str(), QOS, nullptr, listener_);
+    }
+  }
+
+  virtual void connection_lost(const std::string& cause) {
+    std::cout << "\nConnection lost" << std::endl;
 		if (!cause.empty())
 			std::cout << "\tcause: " << cause << std::endl;
 
@@ -121,8 +133,9 @@ class callback : public virtual mqtt::callback,
 		std::cout << "Message arrived on topic " << std::endl;
 		std::cout << "\ttopic: '" << topic << "'" << std::endl;
 
-    if(topic == "uas/ardrone1/navdata")
+    if(topic == "uas/uav1/navdata")
     {
+      printf("Inside ...\n");
       binn* obj;
 
       obj = binn_open((void*)(msg->get_payload()).data());

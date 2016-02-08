@@ -120,7 +120,7 @@ class callback : public virtual mqtt::callback,
     {
       binn* obj;
 
-      obj = binn_open(msg->get_payload());
+      obj = binn_open((void*)(msg->get_payload()).data());
 
       uint32_t timestamp = binn_object_uint32(obj,(char*)"timestamp");
       uint16_t tag = binn_object_uint16(obj, (char*)"tag");
@@ -145,7 +145,7 @@ class callback : public virtual mqtt::callback,
       //NEED TO PUBLISH ON ROS TOPICS HERE
 
       binn_free(obj);
-      return 1;
+      return;
     }
 		//std::cout << "\t'" << msg->to_str() << "'\n" << std::endl;
 	}

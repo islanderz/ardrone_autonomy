@@ -108,6 +108,38 @@ class callback : public virtual mqtt::callback,
 	virtual void message_arrived(const std::string& topic, mqtt::message_ptr msg) {
 		std::cout << "Message arrived on topic " << std::endl;
 		std::cout << "\ttopic: '" << topic << "'" << std::endl;
+
+    if(strcmp(topicName,"uas/ardrone1/navdata") == 0)
+    {
+      binn* obj;
+
+      obj = binn_open(message->payload);
+
+      uint32_t timestamp = binn_object_uint32(obj,(char*)"timestamp");
+      uint16_t tag = binn_object_uint16(obj, (char*)"tag");
+      uint16_t size = binn_object_uint16(obj, (char*)"size");
+      uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
+      uint32_t vbat_flying_percentage = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
+      float theta = binn_object_float(obj, (char*)"theta");
+      float phi = binn_object_float(obj, (char*)"phi");
+      float psi = binn_object_float(obj, (char*)"psi");
+      uint32_t altitude = binn_object_uint32(obj, (char*)"altitude");
+      float vx = binn_object_float(obj, (char*)"vx");
+      float vy = binn_object_float(obj, (char*)"vy");
+      float vz = binn_object_float(obj, (char*)"vz");
+      uint32_t num_frames = binn_object_uint32(obj, (char*)"num_frames");
+      uint32_t detection_camera_type = binn_object_uint32(obj, (char*)"detection_camera_type");
+
+      printf("Received navdata msg with angles: %f %f %f\n", theta, phi, psi);
+      printf("Received navdata msg with velocities: %f %f %f\n", vx, vy, vz);
+      printf("Received navdata msg with battery/ctrl_state/altd: %d/%d/%d\n", vbat_flying_percentage, ctrl_state, altitude);
+      printf("\n");
+
+      //NEED TO PUBLISH ON ROS TOPICS HERE
+
+      binn_free(obj);
+      return 1;
+    }
 		//std::cout << "\t'" << msg->to_str() << "'\n" << std::endl;
 	}
 

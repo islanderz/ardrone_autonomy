@@ -10,7 +10,7 @@ extern "C" {
 
 /****************************/
 
-#define CLIENTID    "mqttReceiver"
+#define CLIENTID    "mqttReceiver1"
 #define QOS         1
 #define TIMEOUT     10000L
 
@@ -104,7 +104,7 @@ class callback : public virtual mqtt::callback,
   // Re-connection success
   virtual void on_success(const mqtt::itoken& tok) {
     std::cout << "Reconnection success" << std::endl;;
-    cli_.subscribe("hello", QOS, nullptr, listener_);
+    //cli_.subscribe("hello", QOS, nullptr, listener_);
     std::vector<std::string> topicsList;
     ros::param::get("/mqttReceiver/topicsList",topicsList);
     for(int i =0 ; i < topicsList.size(); i++)
@@ -133,9 +133,13 @@ class callback : public virtual mqtt::callback,
 		std::cout << "Message arrived on topic " << std::endl;
 		std::cout << "\ttopic: '" << topic << "'" << std::endl;
 
-    if(topic == "uas/uav1/navdata")
+    if(topic == "uas/uav1/compressedImageStream")
     {
-      printf("Inside ...\n");
+      std::cout << "Received compressed Image" << std::endl;
+
+    }
+    else if(topic == "uas/uav1/navdata")
+    {
       binn* obj;
 
       obj = binn_open((void*)(msg->get_payload()).data());

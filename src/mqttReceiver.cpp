@@ -133,10 +133,37 @@ class callback : public virtual mqtt::callback,
 		std::cout << "Message arrived on topic " << std::endl;
 		std::cout << "\ttopic: '" << topic << "'" << std::endl;
 
+    int messageLen = (msg->get_payload()).length();
+
     if(topic == "uas/uav1/compressedImageStream")
     {
       std::cout << "Received compressed Image" << std::endl;
+      const char* comp_data = (msg->get_payload()).data();
+      uint8_t* uncompressed_data;
+      uncompressed_data = new uint8_t[5*messageLen];
+      unsigned long uncomp_size;
+      int ret_uncp = uncompress(uncompressed_data, &uncomp_size, (uint8_t*)comp_data, messageLen);
 
+      if (ret_uncp == Z_OK){
+        printf("uncompression ok\n");
+      }
+      else if (ret_uncp == Z_MEM_ERROR)
+      {
+        printf("uncompression memory error\n");
+        return;
+      }
+      else if (ret_uncp == Z_BUF_ERROR)
+      {
+        printf("uncompression buffer error\n");
+        return;
+      }
+      else if (ret_uncp == Z_DATA_ERROR)
+      {
+        printf("uncompression data error\n");
+        return;
+      }
+      std::cout << "Uncompressed from " << messageLen << " to " << uncomp_size << " bytes" << std::endl;
+      delete[] uncompressed_data;
     }
     else if(topic == "uas/uav1/navdata")
     {

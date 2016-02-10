@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "MQTTAsync.h"
+#include <image_transport/image_transport.h>
 #include <ardrone_autonomy/Navdata.h>
 #include "zlib.h"
 extern "C" {
@@ -76,7 +77,10 @@ class callback : public virtual mqtt::callback,
 
   //ROS Topic Publisher
   ros::NodeHandle nh_;
+  image_transport::ImageTransport it_;
   ros::Publisher navdataPub_;
+  image_transport::Publisher imagePub_;
+//  ros::Publisher imagePub_;
 
 	void reconnect() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -130,8 +134,8 @@ class callback : public virtual mqtt::callback,
 	}
 
 	virtual void message_arrived(const std::string& topic, mqtt::message_ptr msg) {
-		std::cout << "Message arrived on topic " << std::endl;
-		std::cout << "\ttopic: '" << topic << "'" << std::endl;
+		//std::cout << "Message arrived on topic " << std::endl;
+		//std::cout << "\ttopic: '" << topic << "'" << std::endl;
 
     int messageLen = (msg->get_payload()).length();
 
@@ -163,6 +167,36 @@ class callback : public virtual mqtt::callback,
         return;
       }
       std::cout << "Uncompressed from " << messageLen << " to " << uncomp_size << " bytes" << std::endl;
+      
+      sensor_msgs::Image image_msg;
+      /*********************
+      image_msg.width = D1_STREAM_WIDTH;
+      image_msg.height = D1_STREAM_HEIGHT;
+      image_msg.encoding = "rgb8";
+      image_msg.is_bigendian = false;
+      image_msg.step = D1_STREAM_WIDTH * 3;
+      image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
+
+      //if (!realtime_video) vp_os_mutex_lock(&video_lock);
+      image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
+      std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
+      //if (!realtime_video) vp_os_mutex_unlock(&video_lock);
+
+      cinfo_msg_hori.header.stamp = image_msg.header.stamp;
+      cinfo_msg_vert.header.stamp = image_msg.header.stamp;
+
+      if (cam_state == ZAP_CHANNEL_HORI)
+      {
+        
+         // Horizontal camera is activated, only /ardrone/front/ is being updated
+         
+        cinfo_msg_hori.width = D1_STREAM_WIDTH;
+        cinfo_msg_hori.height = D1_STREAM_HEIGHT;
+
+        imagePub_.publish(image_msg, cinfo_msg_hori);
+        //hori_pub.publish(image_msg, cinfo_msg_hori);
+     ***********************/
+
       delete[] uncompressed_data;
     }
     else if(topic == "uas/uav1/navdata")
@@ -199,7 +233,7 @@ class callback : public virtual mqtt::callback,
       //printf("Received navdata msg with angles: %f %f %f\n", theta, phi, psi);
       //printf("Received navdata msg with velocities: %f %f %f\n", vx, vy, vz);
       //printf("Received navdata msg with battery/ctrl_state/altd: %d/%d/%d\n", vbat_flying_percentage, ctrl_state, altitude);
-      printf("Received a Navdata msg over MQTT. Sending it out as a msg on ROS Topic.\n");
+      //printf("Received a Navdata msg over MQTT. Sending it out as a msg on ROS Topic.\n");
 
       //NEED TO PUBLISH ON ROS TOPICS HERE
 
@@ -218,11 +252,12 @@ class callback : public virtual mqtt::callback,
 
 public:
 	callback(mqtt::async_client& cli, action_listener& listener, ros::NodeHandle nh) 
-				: cli_(cli), listener_(listener), nh_(nh) {}
+				: cli_(cli), listener_(listener), nh_(nh), it_(nh) {}
 
   void setNavdataPublisher()
   {
     navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("ardrone/navdata", 200);
+    imagePub_ = it_.advertise("ardrone/image_raw", 10); 
   }
 };
 

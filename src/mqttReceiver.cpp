@@ -139,65 +139,56 @@ class callback : public virtual mqtt::callback,
 
     int messageLen = (msg->get_payload()).length();
 
-    if(topic == "uas/uav1/compressedImageStream")
+    if(topic == "uas/uav1/compressedImageStream" || topic == "uas/uav1/uncompressedImageStream")
     {
-      std::cout << "Received compressed Image" << std::endl;
-      const char* comp_data = (msg->get_payload()).data();
-      uint8_t* uncompressed_data;
-      uncompressed_data = new uint8_t[5*messageLen];
-      unsigned long uncomp_size;
-      int ret_uncp = uncompress(uncompressed_data, &uncomp_size, (uint8_t*)comp_data, messageLen);
+      std::cout << "Received Image msg" << std::endl;
+      unsigned long imgDataLen = -1;
+      uint8_t* imgData;
 
-      if (ret_uncp == Z_OK){
-        printf("uncompression ok\n");
-      }
-      else if (ret_uncp == Z_MEM_ERROR)
+      if(topic == "uas/uav1/compressedImageStream")
       {
-        printf("uncompression memory error\n");
-        return;
-      }
-      else if (ret_uncp == Z_BUF_ERROR)
+        //need to uncompress
+
+        const char* comp_data = (msg->get_payload()).data();
+        imgData = new uint8_t[5*messageLen];
+        int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)comp_data, messageLen);
+        
+        //handle unsuccessful uncompression
+        if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
+        else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
+        else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
+        else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
+
+        std::cout << "Uncompressed from " << messageLen << " to " << imgDataLen << " bytes" << std::endl;
+      } 
+      else
       {
-        printf("uncompression buffer error\n");
-        return;
+        imgData = (uint8_t*)((msg->get_payload()).data());
+        imgDataLen = messageLen;
       }
-      else if (ret_uncp == Z_DATA_ERROR)
-      {
-        printf("uncompression data error\n");
-        return;
-      }
-      std::cout << "Uncompressed from " << messageLen << " to " << uncomp_size << " bytes" << std::endl;
-      
       sensor_msgs::Image image_msg;
-      /*********************
+      /*********************/
+      int D1_STREAM_HEIGHT = 200;
+      int D1_STREAM_WIDTH = 200;
       image_msg.width = D1_STREAM_WIDTH;
       image_msg.height = D1_STREAM_HEIGHT;
       image_msg.encoding = "rgb8";
       image_msg.is_bigendian = false;
       image_msg.step = D1_STREAM_WIDTH * 3;
-      image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
+      //image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
+      image_msg.data.resize(imgDataLen);
 
       //if (!realtime_video) vp_os_mutex_lock(&video_lock);
       image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
-      std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
+      //std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
+      std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
       //if (!realtime_video) vp_os_mutex_unlock(&video_lock);
 
-      cinfo_msg_hori.header.stamp = image_msg.header.stamp;
-      cinfo_msg_vert.header.stamp = image_msg.header.stamp;
-
-      if (cam_state == ZAP_CHANNEL_HORI)
-      {
-        
-         // Horizontal camera is activated, only /ardrone/front/ is being updated
-         
-        cinfo_msg_hori.width = D1_STREAM_WIDTH;
-        cinfo_msg_hori.height = D1_STREAM_HEIGHT;
-
-        imagePub_.publish(image_msg, cinfo_msg_hori);
+      imagePub_.publish(image_msg);
         //hori_pub.publish(image_msg, cinfo_msg_hori);
-     ***********************/
+     /***********************/
 
-      delete[] uncompressed_data;
+      delete[] imgData;//uncompressed_data;
     }
     else if(topic == "uas/uav1/navdata")
     {

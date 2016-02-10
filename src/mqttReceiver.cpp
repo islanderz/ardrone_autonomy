@@ -11,7 +11,7 @@ extern "C" {
 
 /****************************/
 
-#define CLIENTID    "mqttReceiver1"
+#define CLIENTID    "mqttReceiverA"
 #define QOS         1
 #define TIMEOUT     10000L
 
@@ -137,21 +137,34 @@ class callback : public virtual mqtt::callback,
 		//std::cout << "Message arrived on topic " << std::endl;
 		//std::cout << "\ttopic: '" << topic << "'" << std::endl;
 
-    int messageLen = (msg->get_payload()).length();
-
     if(topic == "uas/uav1/compressedImageStream" || topic == "uas/uav1/uncompressedImageStream")
     {
       std::cout << "Received Image msg" << std::endl;
       unsigned long imgDataLen = -1;
       uint8_t* imgData;
 
+      binn* obj;
+
+      obj = binn_open((void*)(msg->get_payload()).data());
+
+      sensor_msgs::Image image_msg;
+      image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
+
+      image_msg.width = binn_object_uint32(obj,(char*)"width");
+      image_msg.height = binn_object_uint32(obj,(char*)"height");
+      image_msg.encoding = "rgb8";
+      image_msg.is_bigendian = false;
+      //SUREKA-NOTE-TODO Make sure that the step is width*3 and not height*3 ... 
+      image_msg.step = image_msg.width * 3;
+
       if(topic == "uas/uav1/compressedImageStream")
       {
         //need to uncompress
 
-        const char* comp_data = (msg->get_payload()).data();
-        imgData = new uint8_t[5*messageLen];
-        int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)comp_data, messageLen);
+        int comp_size = 0;
+        uint8_t* comp_data = (uint8_t*)(binn_object_blob(obj,(char*)"data", &comp_size));
+        imgData = new uint8_t[5*comp_size];
+        int ret_uncp = uncompress(imgData, &imgDataLen, comp_data, comp_size);
         
         //handle unsuccessful uncompression
         if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
@@ -159,27 +172,18 @@ class callback : public virtual mqtt::callback,
         else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
         else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
 
-        std::cout << "Uncompressed from " << messageLen << " to " << imgDataLen << " bytes" << std::endl;
+        std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
       } 
       else
       {
-        imgData = (uint8_t*)((msg->get_payload()).data());
-        imgDataLen = messageLen;
+        //uncompressed Image
+        imgData = (uint8_t*)(binn_object_blob(obj,(char*)"data", (int*)&imgDataLen));
       }
-      sensor_msgs::Image image_msg;
       /*********************/
-      int D1_STREAM_HEIGHT = 200;
-      int D1_STREAM_WIDTH = 200;
-      image_msg.width = D1_STREAM_WIDTH;
-      image_msg.height = D1_STREAM_HEIGHT;
-      image_msg.encoding = "rgb8";
-      image_msg.is_bigendian = false;
-      image_msg.step = D1_STREAM_WIDTH * 3;
       //image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
       image_msg.data.resize(imgDataLen);
 
       //if (!realtime_video) vp_os_mutex_lock(&video_lock);
-      image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
       //std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
       std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
       //if (!realtime_video) vp_os_mutex_unlock(&video_lock);

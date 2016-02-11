@@ -85,8 +85,8 @@ class callback : public virtual mqtt::callback,
 	void reconnect() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		mqtt::connect_options connOpts;
-		connOpts.set_keep_alive_interval(20);
-		connOpts.set_clean_session(true);
+		//connOpts.set_keep_alive_interval(20);
+		//connOpts.set_clean_session(true);
 
 		try {
 			cli_.connect(connOpts, nullptr, *this);
@@ -279,8 +279,8 @@ int main(int argc, char **argv)
     
 
   mqtt::connect_options connOpts;
-  connOpts.set_keep_alive_interval(20);
-  connOpts.set_clean_session(true);
+  //connOpts.set_keep_alive_interval(20);
+  //connOpts.set_clean_session(true);
 
   mqtt::itoken_ptr conntok = client.connect(connOpts);
   std::cout << "Waiting for the connection..." << std::flush;

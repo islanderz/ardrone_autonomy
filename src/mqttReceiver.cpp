@@ -11,7 +11,7 @@ extern "C" {
 
 /****************************/
 
-#define CLIENTID    "mqttReceiverA"
+#define CLIENTID    "mqttReceiverA1"
 #define QOS         1
 #define TIMEOUT     10000L
 
@@ -85,23 +85,15 @@ class callback : public virtual mqtt::callback,
 	void reconnect() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		mqtt::connect_options connOpts;
-		//connOpts.set_keep_alive_interval(20);
+		connOpts.set_keep_alive_interval(20);
 		//connOpts.set_clean_session(true);
 
-		try {
-			cli_.connect(connOpts, nullptr, *this);
-		}
-		catch (const mqtt::exception& exc) {
-			std::cerr << "Error: " << exc.what() << std::endl;
-			exit(1);
-		}
-	}
+	  cli_.connect(connOpts, nullptr, *this);
+  }
 
 	// Re-connection failure
 	virtual void on_failure(const mqtt::itoken& tok) {
-		std::cout << "Reconnection failed." << std::endl;
-		if (++nretry_ > 5)
-			exit(1);
+		std::cout << "Reconnection failed. Trying to reconnect.." << std::endl;
 		reconnect();
 	}
 
@@ -140,44 +132,71 @@ class callback : public virtual mqtt::callback,
     if(topic == "uas/uav1/compressedImageStream" || topic == "uas/uav1/uncompressedImageStream")
     {
       std::cout << "Received Image msg" << std::endl;
-      unsigned long imgDataLen = -1;
+      unsigned long imgDataLen;
       uint8_t* imgData;
 
-      binn* obj;
+      //binn* obj;
 
-      obj = binn_open((void*)(msg->get_payload()).data());
+      //obj = binn_open((void*)(msg->get_payload()).data());
 
       sensor_msgs::Image image_msg;
       image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
 
-      image_msg.width = binn_object_uint32(obj,(char*)"width");
-      image_msg.height = binn_object_uint32(obj,(char*)"height");
+      uint32_t imageWidth = 640;//binn_object_uint32(obj,(char*)"width");
+      image_msg.width = imageWidth;
+      image_msg.height = 360;//binn_object_uint32(obj,(char*)"height");
       image_msg.encoding = "rgb8";
       image_msg.is_bigendian = false;
       //SUREKA-NOTE-TODO Make sure that the step is width*3 and not height*3 ... 
-      image_msg.step = image_msg.width * 3;
+      image_msg.step = imageWidth * 3;
 
       if(topic == "uas/uav1/compressedImageStream")
       {
+        std::cout << "Compressed Images not yet handled\n";
+		    return;
         //need to uncompress
-
-        int comp_size = 0;
-        uint8_t* comp_data = (uint8_t*)(binn_object_blob(obj,(char*)"data", &comp_size));
-        imgData = new uint8_t[5*comp_size];
-        int ret_uncp = uncompress(imgData, &imgDataLen, comp_data, comp_size);
+        //int comp_size;
+        //uint8_t* comp_data;
+        //void** binn_image_data;
+        //= (uint8_t*)(binn_object_blob(obj,(char*)"data", &comp_size));
+        //if(binn_object_get_blob(obj, (char*)"data", binn_image_data, &comp_size))
+       // {
+          //comp_data = (uint8_t*)binn_image_data[0];
+        //  imgData = new uint8_t[5*comp_size];
+         // int ret_uncp = uncompress(imgData, &imgDataLen, comp_data, comp_size);
+         // if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
+         // else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
+          //else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
+          //else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
+        //}
+       // else
+       // {
+       //   std::cout << "Binn Returned no blob of image data\n";
+       //   return;
+      //  }
         
         //handle unsuccessful uncompression
-        if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
-        else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
-        else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
-        else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
 
-        std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
+       // std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
       } 
       else
       {
         //uncompressed Image
-        imgData = (uint8_t*)(binn_object_blob(obj,(char*)"data", (int*)&imgDataLen));
+        //std::cout << "hereawefljadlsfkj\n";
+        //imgData = (uint8_t*)(binn_object_blob(obj,(char*)"data", (int*)&imgDataLen));
+        //int temp_size = 0;
+        //void** binn_image_data;
+        
+        //if(binn_object_get_blob(obj, (char*)"data", binn_image_data, &temp_size))
+        //{
+          imgData = (uint8_t*)(msg->get_payload()).data();
+          imgDataLen = (msg->get_payload()).length();
+        //}
+        //else
+       // {
+        //  std::cout << "Binn returned no blob of image data\n";
+        //  return;
+       // }
       }
       /*********************/
       //image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
@@ -185,14 +204,19 @@ class callback : public virtual mqtt::callback,
 
       //if (!realtime_video) vp_os_mutex_lock(&video_lock);
       //std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
-      std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
+      //std::cout << "here234\n";
+      if(imgData != NULL && imgDataLen != 0)
+      {
+        std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
+        imagePub_.publish(image_msg);
+      }
       //if (!realtime_video) vp_os_mutex_unlock(&video_lock);
+      //std::cout << "here456\n";
 
-      imagePub_.publish(image_msg);
         //hori_pub.publish(image_msg, cinfo_msg_hori);
      /***********************/
 
-      delete[] imgData;//uncompressed_data;
+      //delete[] imgData;//uncompressed_data;
     }
     else if(topic == "uas/uav1/navdata")
     {
@@ -279,8 +303,8 @@ int main(int argc, char **argv)
     
 
   mqtt::connect_options connOpts;
-  //connOpts.set_keep_alive_interval(20);
-  //connOpts.set_clean_session(true);
+  connOpts.set_keep_alive_interval(20);
+  //.connOpts.set_clean_session(true);
 
   mqtt::itoken_ptr conntok = client.connect(connOpts);
   std::cout << "Waiting for the connection..." << std::flush;

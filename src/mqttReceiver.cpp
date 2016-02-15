@@ -161,22 +161,20 @@ class callback : public virtual mqtt::callback,
 
       if(topic == "uas/uav1/compressedImageStream")
       {
-        std::cout << "Compressed Images not yet handled\n";
-		    return;
         //need to uncompress
-        //int comp_size;
+        int comp_size = (msg->get_payload()).length();
         //uint8_t* comp_data;
         //void** binn_image_data;
         //= (uint8_t*)(binn_object_blob(obj,(char*)"data", &comp_size));
         //if(binn_object_get_blob(obj, (char*)"data", binn_image_data, &comp_size))
        // {
-          //comp_data = (uint8_t*)binn_image_data[0];
-        //  imgData = new uint8_t[5*comp_size];
-         // int ret_uncp = uncompress(imgData, &imgDataLen, comp_data, comp_size);
-         // if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
-         // else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
-          //else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
-          //else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
+          //omp_data = (uint8_t*)binn_image_data[0];
+          imgData = new uint8_t[5*comp_size];
+          int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)(msg->get_payload()).data(), comp_size);
+          if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
+          else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
+          else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
+          else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
         //}
        // else
        // {
@@ -186,7 +184,7 @@ class callback : public virtual mqtt::callback,
         
         //handle unsuccessful uncompression
 
-       // std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
+        std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
       } 
       else
       {

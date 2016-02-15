@@ -2,6 +2,8 @@
 #include "std_msgs/String.h"
 #include "MQTTAsync.h"
 #include <image_transport/image_transport.h>
+#include <sys/time.h>
+#include <fstream>
 #include <ardrone_autonomy/Navdata.h>
 #include "zlib.h"
 extern "C" {
@@ -11,7 +13,8 @@ extern "C" {
 
 /****************************/
 
-#define CLIENTID    "mqttReceiverA1"
+std::string CLIENTID("mqttReceiveer");
+
 #define QOS         1
 #define TIMEOUT     10000L
 
@@ -80,6 +83,12 @@ class callback : public virtual mqtt::callback,
   image_transport::ImageTransport it_;
   ros::Publisher navdataPub_;
   image_transport::Publisher imagePub_;
+
+  long long int diff_ms;
+  int navdataCount;
+  std::fstream navdataFile;
+
+
 //  ros::Publisher imagePub_;
 
 	void reconnect() {
@@ -220,12 +229,39 @@ class callback : public virtual mqtt::callback,
     }
     else if(topic == "uas/uav1/navdata")
     {
+      struct timeval tv;
+      gettimeofday(&tv, NULL);
+
       binn* obj;
 
       obj = binn_open((void*)(msg->get_payload()).data());
       
       ardrone_autonomy::Navdata navMsg;
       navMsg.header.stamp = ros::Time::now();
+
+      uint32_t org_sec = binn_object_uint32(obj, (char*)"time_sec");
+      uint32_t org_usec = binn_object_uint32(obj, (char*)"time_usec");
+
+      uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
+
+      double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
+      double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
+
+      navdataFile << std::fixed << msgTime << ", ";
+      navdataFile << std::fixed << recvTime << ", ";
+      navdataFile << recvTime - msgTime << std::endl;
+
+      diff_ms = diff_ms + (delaysec)*1000000L + tv.tv_usec - org_usec;  
+      navdataCount++;
+      if(navdataCount >= 200)
+      {
+        std::cout << "Average delay of last 200 msgs: " << ((double)diff_ms/1000000L)/200.0 << " sec" << std::endl;
+        navdataCount = 0;
+        diff_ms = 0;
+      }
+
+      //std::cout << org_sec << " " << tv.tv_sec << std::endl;
+      //std::cout << "Count: " << navdataCount << std::endl;//" " << "Delay is " << delaysec << " sec and " << delayusec << " ms" << std::endl;
 
       navMsg.batteryPercent = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
       uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
@@ -270,10 +306,31 @@ class callback : public virtual mqtt::callback,
 	virtual void delivery_complete(mqtt::idelivery_token_ptr token) {}
 
 public:
-	callback(mqtt::async_client& cli, action_listener& listener, ros::NodeHandle nh) 
-				: cli_(cli), listener_(listener), nh_(nh), it_(nh) {}
+  callback(mqtt::async_client& cli, action_listener& listener, ros::NodeHandle nh) 
+    : cli_(cli), listener_(listener), nh_(nh), it_(nh), diff_ms(0), navdataCount(0) {
 
-  void setNavdataPublisher()
+      struct tm *navdata_atm = NULL;
+      struct timeval tv;
+      char filename[100];
+      gettimeofday(&tv,NULL);
+      time_t temptime = (time_t)tv.tv_sec;
+      navdata_atm = localtime(&temptime);
+      strcpy(filename, "delays");
+
+      sprintf(filename, "%s_%04d%02d%02d_%02d%02d%02d.txt",
+          filename,navdata_atm->tm_year+1900, navdata_atm->tm_mon+1, navdata_atm->tm_mday,
+          navdata_atm->tm_hour, navdata_atm->tm_min, navdata_atm->tm_sec);
+
+
+      std::cout << "Writing Navdata msg times and delays to " << filename << std::endl;
+      navdataFile.open(filename, std::fstream::out | std::fstream::app);
+
+      navdataFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
+
+
+  }
+
+  void initPublishers()
   {
     navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("ardrone/navdata", 200);
     imagePub_ = it_.advertise("ardrone/image_raw", 10); 
@@ -282,6 +339,10 @@ public:
 
 int main(int argc, char **argv)
 {
+  srand(time(NULL));
+  CLIENTID += std::to_string(rand());
+
+  
   ros::init(argc, argv, "mqttReceiver");
   ros::NodeHandle nodeHandle;
 
@@ -292,14 +353,15 @@ int main(int argc, char **argv)
 
   std::string address = broker + ":" + brokerPort;
 
-  mqtt::async_client client(address.c_str(), CLIENTID);
+
+  mqtt::async_client client(address.c_str(), CLIENTID.c_str());
   action_listener subListener("Subscription");
 
   callback cb(client, subListener,nodeHandle);
   client.set_callback(cb);
 
   //initialize the navdata publisher
-  cb.setNavdataPublisher();
+  cb.initPublishers();
     
 
   mqtt::connect_options connOpts;

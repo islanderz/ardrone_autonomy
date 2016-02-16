@@ -15,7 +15,7 @@ extern "C" {
 
 std::string CLIENTID("mqttReceiveer");
 
-#define QOS         1
+#define QOS         0
 #define TIMEOUT     10000L
 
 /*******************************************************************************
@@ -85,8 +85,11 @@ class callback : public virtual mqtt::callback,
   image_transport::Publisher imagePub_;
 
   long long int diff_ms;
+  long long int diff_ms_vid;
   int navdataCount;
+  int videoCount;
   std::fstream navdataFile;
+  std::fstream videoFile;
 
 
 //  ros::Publisher imagePub_;
@@ -140,7 +143,7 @@ class callback : public virtual mqtt::callback,
 
     if(topic == "uas/uav1/compressedImageStream" || topic == "uas/uav1/uncompressedImageStream")
     {
-      std::cout << "Received Image msg" << std::endl;
+      //std::cout << "Received Image msg" << std::endl;
       unsigned long imgDataLen;
       uint8_t* imgData;
 
@@ -161,27 +164,51 @@ class callback : public virtual mqtt::callback,
 
       if(topic == "uas/uav1/compressedImageStream")
       {
-        //need to uncompress
-        int comp_size = (msg->get_payload()).length();
-        //uint8_t* comp_data;
-        //void** binn_image_data;
-        //= (uint8_t*)(binn_object_blob(obj,(char*)"data", &comp_size));
-        //if(binn_object_get_blob(obj, (char*)"data", binn_image_data, &comp_size))
-       // {
-          //omp_data = (uint8_t*)binn_image_data[0];
-          imgData = new uint8_t[5*comp_size];
-          int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)(msg->get_payload()).data(), comp_size);
-          if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
-          else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
-          else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
-          else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
-        //}
-       // else
-       // {
-       //   std::cout << "Binn Returned no blob of image data\n";
-       //   return;
-      //  }
+        if((msg->get_payload().length()) > 5000)
+        {
+          std::cout << "Received Pure Image msg - returning - (this is a hack to calculate delays that will be removed later)\n";
+          return;
+        }
+        std::cout << "Received timestamp msg - corelating with prev img msg - appending to file ~/.ros/videoDelays...\n";
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+
+        binn* obj;
+
+        obj = binn_open((void*)(msg->get_payload()).data());
         
+
+        uint32_t org_sec = binn_object_uint32(obj, (char*)"time_sec");
+        uint32_t org_usec = binn_object_uint32(obj, (char*)"time_usec");
+        
+        uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
+
+        double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
+        double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
+
+        videoFile << std::fixed << msgTime << ", ";
+        videoFile << std::fixed << recvTime << ", ";
+        videoFile << recvTime - msgTime << std::endl;
+
+        diff_ms_vid = diff_ms_vid + (delaysec)*1000000L + tv.tv_usec - org_usec;
+        videoCount++;
+        if(videoCount >= 5)
+        {
+          std::cout << "Average delay of last 5 video msgs: " << ((double)diff_ms/1000000L)/5.0 << " sec" << std::endl;
+          videoCount = 0;
+          diff_ms_vid = 0;
+        }
+        return;
+
+
+        int comp_size = (msg->get_payload()).length();
+        imgData = new uint8_t[5*comp_size];
+        int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)(msg->get_payload()).data(), comp_size);
+        if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
+        else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
+        else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
+        else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
+
         //handle unsuccessful uncompression
 
         std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
@@ -189,41 +216,19 @@ class callback : public virtual mqtt::callback,
       else
       {
         //uncompressed Image
-        //std::cout << "hereawefljadlsfkj\n";
-        //imgData = (uint8_t*)(binn_object_blob(obj,(char*)"data", (int*)&imgDataLen));
-        //int temp_size = 0;
-        //void** binn_image_data;
-        
-        //if(binn_object_get_blob(obj, (char*)"data", binn_image_data, &temp_size))
-        //{
-          imgData = (uint8_t*)(msg->get_payload()).data();
-          imgDataLen = (msg->get_payload()).length();
-        //}
-        //else
-       // {
-        //  std::cout << "Binn returned no blob of image data\n";
-        //  return;
-       // }
+        imgData = (uint8_t*)(msg->get_payload()).data();
+        imgDataLen = (msg->get_payload()).length();
       }
-      /*********************/
-      //image_msg.data.resize(D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3);
       image_msg.data.resize(imgDataLen);
 
-      //if (!realtime_video) vp_os_mutex_lock(&video_lock);
-      //std::copy(buffer, buffer + (D1_STREAM_WIDTH * D1_STREAM_HEIGHT * 3), image_msg.data.begin());
-      //std::cout << "here234\n";
       if(imgData != NULL && imgDataLen != 0)
       {
         std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
         imagePub_.publish(image_msg);
       }
-      //if (!realtime_video) vp_os_mutex_unlock(&video_lock);
-      //std::cout << "here456\n";
 
-        //hori_pub.publish(image_msg, cinfo_msg_hori);
-     /***********************/
-
-      //delete[] imgData;//uncompressed_data;
+      if(topic == "uas/uav1/compressedImageStream")
+        delete[] imgData;
     }
     else if(topic == "uas/uav1/navdata")
     {
@@ -253,13 +258,10 @@ class callback : public virtual mqtt::callback,
       navdataCount++;
       if(navdataCount >= 200)
       {
-        std::cout << "Average delay of last 200 msgs: " << ((double)diff_ms/1000000L)/200.0 << " sec" << std::endl;
+        std::cout << "Average delay of last 200 navdata msgs: " << ((double)diff_ms/1000000L)/200.0 << " sec" << std::endl;
         navdataCount = 0;
         diff_ms = 0;
       }
-
-      //std::cout << org_sec << " " << tv.tv_sec << std::endl;
-      //std::cout << "Count: " << navdataCount << std::endl;//" " << "Delay is " << delaysec << " sec and " << delayusec << " ms" << std::endl;
 
       navMsg.batteryPercent = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
       uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
@@ -283,22 +285,8 @@ class callback : public virtual mqtt::callback,
       
       binn_free(obj);
 
-      //printf("Received navdata msg with angles: %f %f %f\n", theta, phi, psi);
-      //printf("Received navdata msg with velocities: %f %f %f\n", vx, vy, vz);
-      //printf("Received navdata msg with battery/ctrl_state/altd: %d/%d/%d\n", vbat_flying_percentage, ctrl_state, altitude);
-      //printf("Received a Navdata msg over MQTT. Sending it out as a msg on ROS Topic.\n");
-
-      //NEED TO PUBLISH ON ROS TOPICS HERE
-
-      //conversions from ardrone_driver.cpp
-
-
-      // positive means counterclockwise rotation around axis
-
-
       return;
     }
-		//std::cout << "\t'" << msg->to_str() << "'\n" << std::endl;
 	}
 
 	virtual void delivery_complete(mqtt::idelivery_token_ptr token) {}
@@ -309,21 +297,29 @@ public:
 
       struct tm *navdata_atm = NULL;
       struct timeval tv;
-      char filename[100];
+      char navdataFilename[100];
+      char videoFilename[100];
+      char timestring[100];
       gettimeofday(&tv,NULL);
       time_t temptime = (time_t)tv.tv_sec;
       navdata_atm = localtime(&temptime);
-      strcpy(filename, "delays");
+      strcpy(navdataFilename, "NavdataDelays");
+      strcpy(videoFilename, "videoDelays");
 
-      sprintf(filename, "%s_%04d%02d%02d_%02d%02d%02d.txt",
-          filename,navdata_atm->tm_year+1900, navdata_atm->tm_mon+1, navdata_atm->tm_mday,
+      sprintf(timestring, "%04d%02d%02d_%02d%02d%02d.txt",
+          navdata_atm->tm_year+1900, navdata_atm->tm_mon+1, navdata_atm->tm_mday,
           navdata_atm->tm_hour, navdata_atm->tm_min, navdata_atm->tm_sec);
 
+      strcat(navdataFilename, timestring);
+      strcat(videoFilename, timestring);
 
-      std::cout << "Writing Navdata msg times and delays to " << filename << std::endl;
-      navdataFile.open(filename, std::fstream::out | std::fstream::app);
-
+      std::cout << "Writing Navdata msg times and delays to " << navdataFilename << std::endl;
+      navdataFile.open(navdataFilename, std::fstream::out | std::fstream::app);
       navdataFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
+      
+      std::cout << "Writing video msg times and delays to " << videoFilename << std::endl;
+      videoFile.open(videoFilename, std::fstream::out | std::fstream::app);
+      videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 
 
   }

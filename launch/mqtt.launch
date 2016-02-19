@@ -7,9 +7,12 @@
   <!-- Ultrasound frequency (7 or 8). -->
   <arg name="freq" default="8" />
     <node name="mqttReceiver" pkg="ardrone_autonomy" type="mqttReceiver"
-          output="screen" clear_params="true" args="-ip $(arg ip)" launch-prefix="gdb -ex run --args">
-        <param name="mqttBroker" value="tcp://unmand.io" />
-        <param name="mqttBrokerPort" value="1884" />
+          output="screen" clear_params="true" args="-ip $(arg ip)">
+       <!--   output="screen" clear_params="true" args="-ip $(arg ip)" launch-prefix="gdb -ex run - -args"> -->
+<!--        <param name="mqttBroker" value="tcp://unmand.io" /> -->
+<!--        <param name="mqttBrokerPort" value="1884" /> -->
+        <param name="mqttBroker" value="localhost" />
+        <param name="mqttBrokerPort" value="1883" />
         <rosparam param="topicsList">["uas/uav1/navdata","uas/uav1/compressedImageStream", "uas/uav1/uncompressedImageStream"]</rosparam>
         <param name="outdoor" value="0" />
         <param name="max_bitrate" value="4000" />

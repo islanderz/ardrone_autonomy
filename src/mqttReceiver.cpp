@@ -13,7 +13,7 @@ extern "C" {
 
 /****************************/
 
-std::string CLIENTID("mqttReceiveer");
+std::string CLIENTID("mqttReceiver");
 
 #define QOS         0
 #define TIMEOUT     10000L
@@ -47,12 +47,13 @@ std::string CLIENTID("mqttReceiveer");
 
 class mqtt_bridge : public mosqpp::mosquittopp
 {
-  public:
 
+  private:
     ros::NodeHandle nh_;
     image_transport::ImageTransport it_;
     ros::Publisher navdataPub_;
     image_transport::Publisher imagePub_;
+
 
     long long int diff_ms;
     long long int diff_ms_vid;
@@ -62,6 +63,8 @@ class mqtt_bridge : public mosqpp::mosquittopp
     std::fstream videoFile;
 
 
+  public:
+    bool outputDelayFiles;
     mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh);
     ~mqtt_bridge();
 
@@ -92,8 +95,8 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
   diff_ms_vid = 0;
   navdataCount = 0;
   videoCount = 0;
+  outputDelayFiles = 0;
 
-  //setupDelayFiles();
   initPublishers();
 
 
@@ -126,14 +129,40 @@ void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
   else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
   else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
 
-  //handle unsuccessful uncompression
-
   std::cout << "Uncompressed from " << message->payloadlen << " to " << imgDataLen << " bytes" << std::endl;
 
   return;
 }
 void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *message)
 {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+
+  uint32_t org_sec; //= binn_object_uint32(obj, (char*)"time_sec");
+  uint32_t org_usec;// = binn_object_uint32(obj, (char*)"time_usec");
+  memcpy(&org_sec, message->payload, 4);
+  memcpy(&org_usec, message->payload + 4, 4);
+
+  std::cout << "Image recd. with sec: " << org_sec << " and usec: " << org_usec << std::endl;
+
+  uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
+
+  double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
+  double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
+
+  videoFile << std::fixed << msgTime << ", ";
+  videoFile << std::fixed << recvTime << ", ";
+  videoFile << recvTime - msgTime << std::endl;
+
+  diff_ms_vid = diff_ms_vid + (delaysec)*1000000L + tv.tv_usec - org_usec;
+  videoCount++;
+  if(videoCount >= 30)
+  {
+    std::cout << "Average delay of last 30 video msgs: " << ((double)diff_ms_vid/1000000L)/30.0 << " sec" << std::endl;
+    videoCount = 0;
+    diff_ms_vid = 0;
+  }
+
   sensor_msgs::Image image_msg;
   image_msg.header.stamp = ros::Time::now();
 
@@ -142,11 +171,10 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   image_msg.height = 360;
   image_msg.encoding = "rgb8";
   image_msg.is_bigendian = false;
-  //SUREKA-NOTE-TODO Make sure that the step is width*3 and not height*3 ... 
   image_msg.step = imageWidth * 3;
 
-  uint8_t* imgData = (uint8_t*)message->payload;//(msg->get_payload()).data();
-  unsigned long imgDataLen = message->payloadlen;//(msg->get_payload()).length();
+  uint8_t* imgData = (uint8_t*)(message->payload+8);
+  unsigned long imgDataLen = message->payloadlen - 8;
 
   image_msg.data.resize(imgDataLen);
 
@@ -154,7 +182,7 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   {
     std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
     imagePub_.publish(image_msg);
-//    std::cout << "Successfully Published Uncompressed Image on Ros topic" << std::endl;
+    std::cout << "Successfully Published Uncompressed Image on Ros topic" << std::endl;
     return;
   }
 }
@@ -178,9 +206,12 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
   double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
 
-  //      navdataFile << std::fixed << msgTime << ", ";
-  //      navdataFile << std::fixed << recvTime << ", ";
-  //      navdataFile << recvTime - msgTime << std::endl;
+  if(outputDelayFiles)
+  {
+    navdataFile << std::fixed << msgTime << ", ";
+    navdataFile << std::fixed << recvTime << ", ";
+    navdataFile << recvTime - msgTime << std::endl;
+  }
 
   diff_ms = diff_ms + (delaysec)*1000000L + tv.tv_usec - org_usec;  
   navdataCount++;
@@ -251,164 +282,6 @@ void mqtt_bridge::on_subscribe(int mid, int qos_count, const int *granted_qos)
   printf("Subscription succeeded.\n");
 }
 
-
-/////////////////////////////////////////////////////////////////////////////
-
-/*
-   virtual void message_arrived(const std::string& topic, mqtt::message_ptr msg) {
-//std::cout << "Message arrived on topic " << std::endl;
-//std::cout << "\ttopic: '" << topic << "'" << std::endl;
-
-if(topic == "uas/uav1/compressedImageStream" || topic == "uas/uav1/uncompressedImageStream")
-{
-//std::cout << "Received Image msg" << std::endl;
-unsigned long imgDataLen;
-uint8_t* imgData;
-
-//binn* obj;
-
-//obj = binn_open((void*)(msg->get_payload()).data());
-
-sensor_msgs::Image image_msg;
-image_msg.header.stamp = ros::Time::now();//shared_video_receive_time;
-
-uint32_t imageWidth = 640;//binn_object_uint32(obj,(char*)"width");
-image_msg.width = imageWidth;
-image_msg.height = 360;//binn_object_uint32(obj,(char*)"height");
-image_msg.encoding = "rgb8";
-image_msg.is_bigendian = false;
-//SUREKA-NOTE-TODO Make sure that the step is width*3 and not height*3 ... 
-image_msg.step = imageWidth * 3;
-
-if(topic == "uas/uav1/compressedImageStream")
-{
-if((msg->get_payload().length()) > 5000)
-{
-std::cout << "Received Pure Image msg - returning - (this is a hack to calculate delays that will be removed later)\n";
-return;
-}
-std::cout << "Received timestamp msg - corelating with prev img msg - appending to file ~/.ros/videoDelays...\n";
-struct timeval tv;
-gettimeofday(&tv, NULL);
-
-binn* obj;
-
-obj = binn_open((void*)(msg->get_payload()).data());
-
-
-uint32_t org_sec = binn_object_uint32(obj, (char*)"time_sec");
-uint32_t org_usec = binn_object_uint32(obj, (char*)"time_usec");
-
-uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
-
-double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
-double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
-
-videoFile << std::fixed << msgTime << ", ";
-videoFile << std::fixed << recvTime << ", ";
-videoFile << recvTime - msgTime << std::endl;
-
-diff_ms_vid = diff_ms_vid + (delaysec)*1000000L + tv.tv_usec - org_usec;
-videoCount++;
-if(videoCount >= 5)
-{
-std::cout << "Average delay of last 5 video msgs: " << ((double)diff_ms_vid/1000000L)/5.0 << " sec" << std::endl;
-videoCount = 0;
-diff_ms_vid = 0;
-}
-return;
-
-
-int comp_size = (msg->get_payload()).length();
-imgData = new uint8_t[5*comp_size];
-int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)(msg->get_payload()).data(), comp_size);
-if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
-else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
-else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
-else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
-
-//handle unsuccessful uncompression
-
-std::cout << "Uncompressed from " << comp_size << " to " << imgDataLen << " bytes" << std::endl;
-} 
-else
-{
-  //uncompressed Image
-  imgData = (uint8_t*)(msg->get_payload()).data();
-  imgDataLen = (msg->get_payload()).length();
-}
-image_msg.data.resize(imgDataLen);
-
-if(imgData != NULL && imgDataLen != 0)
-{
-  std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
-  imagePub_.publish(image_msg);
-}
-
-if(topic == "uas/uav1/compressedImageStream")
-delete[] imgData;
-}
-else if(topic == "uas/uav1/navdata")
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-
-  binn* obj;
-
-  obj = binn_open((void*)(msg->get_payload()).data());
-
-  ardrone_autonomy::Navdata navMsg;
-  navMsg.header.stamp = ros::Time::now();
-
-  uint32_t org_sec = binn_object_uint32(obj, (char*)"time_sec");
-  uint32_t org_usec = binn_object_uint32(obj, (char*)"time_usec");
-
-  uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
-
-  double msgTime = (double)(org_sec) + (double)org_usec/1000000.0;
-  double recvTime = (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
-
-  navdataFile << std::fixed << msgTime << ", ";
-  navdataFile << std::fixed << recvTime << ", ";
-  navdataFile << recvTime - msgTime << std::endl;
-
-  diff_ms = diff_ms + (delaysec)*1000000L + tv.tv_usec - org_usec;  
-  navdataCount++;
-  if(navdataCount >= 200)
-  {
-    std::cout << "Average delay of last 200 navdata msgs: " << ((double)diff_ms/1000000L)/200.0 << " sec" << std::endl;
-    navdataCount = 0;
-    diff_ms = 0;
-  }
-
-  navMsg.batteryPercent = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
-  uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
-  navMsg.state = ctrl_state >> 16;
-
-  int32_t pressure = binn_object_uint32(obj, (char*)"pressure");
-  navMsg.rotX = (binn_object_float(obj, (char*)"phi")) / 1000.0;
-  navMsg.rotY = (binn_object_float(obj, (char*)"theta")) / 1000.0;
-  navMsg.rotZ = (binn_object_float(obj, (char*)"psi")) / 1000.0;
-  navMsg.altd = binn_object_uint32(obj, (char*)"altitude");
-  navMsg.vx = binn_object_float(obj, (char*)"vx");
-  navMsg.vy = -1*binn_object_float(obj, (char*)"vy");
-  navMsg.vz = -1*binn_object_float(obj, (char*)"vz");
-  navMsg.motor1 = binn_object_uint32(obj, (char*)"motor1");
-  navMsg.motor2 = binn_object_uint32(obj, (char*)"motor2");
-  navMsg.motor3 = binn_object_uint32(obj, (char*)"motor3");
-  navMsg.motor4 = binn_object_uint32(obj, (char*)"motor4");
-  uint32_t tm = binn_object_uint32(obj, (char*)"tm");
-  navMsg.tm = (tm & 0x001FFFFF) + (tm >> 21) * 1000000;
-  navdataPub_.publish(navMsg);
-
-  binn_free(obj);
-
-  return;
-}
-}
-
-virtual void delivery_complete(mqtt::idelivery_token_ptr token) {}
-  */
 void mqtt_bridge::setupDelayFiles()
 {
   struct tm *navdata_atm = NULL;
@@ -437,6 +310,7 @@ void mqtt_bridge::setupDelayFiles()
   videoFile.open(videoFilename, std::fstream::out | std::fstream::app);
   videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 }
+
 int main(int argc, char **argv)
 {
   srand(time(NULL));
@@ -447,7 +321,7 @@ int main(int argc, char **argv)
 
   std::string broker = "tcp://unmand.io";
   int brokerPort;
-  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);;// = "1883";
+  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);// = "1883";
   ros::param::get("/mqttReceiver/mqttBroker",broker);
 
   //std::string address = broker + ":" + brokerPort;
@@ -461,25 +335,17 @@ int main(int argc, char **argv)
   //  mqttBridge = new mqtt_bridge((const char*)"tempconv", (const char*)"localhost", 1883, nodeHandle);
   mqttBridge = new mqtt_bridge(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
   std::cout << "mqttBridge initialized..\n";
+ 
+  bool delayFiles = false;
+  nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);// = "1883";
 
-  //  mqtt::async_client client(address.c_str(), CLIENTID.c_str());
-  //  action_listener subListener("Subscription");
-
-  // callback cb(client, subListener,nodeHandle);
-  // client.set_callback(cb);
-
-  //initialize the navdata publisher
-  //cb.initPublishers();
-
-
-  //  mqtt::connect_options connOpts;
-  //  connOpts.set_keep_alive_interval(20);
-  //.connOpts.set_clean_session(true);
-
-  //  mqtt::itoken_ptr conntok = client.connect(connOpts);
-  //  std::cout << "Waiting for the connection..." << std::flush;
-  //  conntok->wait_for_completion();
-  //  std::cout << "OK" << std::endl;
+  std::cout << "\nOutputDealyFiles set to " << delayFiles << std::endl;
+  
+  if(delayFiles)
+  {
+    mqttBridge->outputDelayFiles = true;
+    mqttBridge->setupDelayFiles();
+  }
 
   std::vector<std::string> topicsList;
   ros::param::get("/mqttReceiver/topicsList",topicsList);

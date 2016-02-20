@@ -143,7 +143,7 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   memcpy(&org_sec, message->payload, 4);
   memcpy(&org_usec, message->payload + 4, 4);
 
-  std::cout << "Image recd. with sec: " << org_sec << " and usec: " << org_usec << std::endl;
+//  std::cout << "Image recd. with sec: " << org_sec << " and usec: " << org_usec << std::endl;
 
   uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
 
@@ -182,7 +182,7 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   {
     std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
     imagePub_.publish(image_msg);
-    std::cout << "Successfully Published Uncompressed Image on Ros topic" << std::endl;
+//    std::cout << "Successfully Published Uncompressed Image on Ros topic" << std::endl;
     return;
   }
 }

@@ -76,6 +76,7 @@ class mqtt_bridge : public mosqpp::mosquittopp
     void handleNavdata(const struct mosquitto_message *message);
     void handleCompressedImage(const struct mosquitto_message *message);
     void handleUncompressedImage(const struct mosquitto_message *message);
+    void takeOffMessageCallback(const std_msgs::String::ConstPtr& msg);
 };
 
 void mqtt_bridge::initPublishers()
@@ -101,8 +102,6 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
 
 
   connect_async(host, port, keepalive);
-
-
 };
 
 mqtt_bridge::~mqtt_bridge()
@@ -311,6 +310,14 @@ void mqtt_bridge::setupDelayFiles()
   videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 }
 
+void mqtt_bridge::takeOffMessageCallback(const std_msgs::String::ConstPtr& msg)
+{
+  ROS_INFO("I heard: [%s]", msg->data.c_str());
+  std::string takeOff = "takeoff1";
+  publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const void *)takeOff.data());
+}
+
+
 int main(int argc, char **argv)
 {
   srand(time(NULL));
@@ -320,21 +327,26 @@ int main(int argc, char **argv)
   ros::NodeHandle nodeHandle;
 
   std::string broker = "tcp://unmand.io";
+  std::string takeOffMsgTopic = "/ardrone/takeoff";
   int brokerPort;
+  nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
   nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);// = "1883";
   ros::param::get("/mqttReceiver/mqttBroker",broker);
 
   //std::string address = broker + ":" + brokerPort;
   std::cout << "Connecting to " << broker << " at " << brokerPort << " port\n";
-
+  
   class mqtt_bridge *mqttBridge;
 
   mosqpp::lib_init();
 
-
   //  mqttBridge = new mqtt_bridge((const char*)"tempconv", (const char*)"localhost", 1883, nodeHandle);
   mqttBridge = new mqtt_bridge(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
   std::cout << "mqttBridge initialized..\n";
+
+  
+  ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
+
  
   bool delayFiles = false;
   nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);// = "1883";
@@ -359,9 +371,11 @@ int main(int argc, char **argv)
   }
   ros::Rate loop_rate(10);
 
+
   int rc;
   while(1){
-    rc = mqttBridge->loop();
+    ros::spinOnce();
+    rc = mqttBridge->loop_start();
     if(rc){
       mqttBridge->reconnect_async();
     }

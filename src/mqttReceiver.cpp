@@ -1,26 +1,6 @@
-#include "ros/ros.h"
-#include "std_msgs/String.h"
-#include "std_msgs/Empty.h"
-#include <mosquittopp.h>
-#include <image_transport/image_transport.h>
-#include <sys/time.h>
-#include <fstream>
-#include <ardrone_autonomy/Navdata.h>
-#include "zlib.h"
-extern "C" {
-#include "binn.h"
-}
-
-
-/****************************/
-
-std::string CLIENTID("mqttReceiver");
-
-#define QOS         0
-#define TIMEOUT     10000L
-
 /*******************************************************************************
  * Copyright (c) 2013 Frank Pagliughi <fpagliughi@mindspring.com>
+   Edited by: 2016 Harshit Sureka <harshit.sureka@gmail.com>
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -35,6 +15,20 @@ std::string CLIENTID("mqttReceiver");
  *    Frank Pagliughi - initial implementation and documentation
  *******************************************************************************/
 
+#include "ros/ros.h"
+#include "std_msgs/String.h"
+#include "std_msgs/Empty.h"
+#include <mosquittopp.h>
+#include <image_transport/image_transport.h>
+#include <sys/time.h>
+#include <fstream>
+#include <ardrone_autonomy/Navdata.h>
+#include "zlib.h"
+extern "C" {
+#include "binn.h"
+}
+#define QOS         0
+#define TIMEOUT     10000L
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -45,39 +39,79 @@ std::string CLIENTID("mqttReceiver");
 
 /////////////////////////////////////////////////////////////////////////////
 
+std::string CLIENTID("mqttReceiver");
 
+//Extend class mosquittopp from the /usr/include/mosquittopp.h file 
+//This class provides all the basic functions for mqtt and 
+//virtual callback functions that are implemented
 class mqtt_bridge : public mosqpp::mosquittopp
 {
-
   private:
+    //ros nodehandle to handle ROS Topics publishes and subscribes
     ros::NodeHandle nh_;
+
+    //Message type for transporting images in ROS
     image_transport::ImageTransport it_;
+
+    //The publisher for navdata on ROS topic
     ros::Publisher navdataPub_;
+
+    //The publisher for images on ROS topic
     image_transport::Publisher imagePub_;
 
 
-    long long int diff_ms;
-    long long int diff_ms_vid;
-    int navdataCount;
-    int videoCount;
+    //Variables to calculate the delay of a message. 
+    long long int diff_ms;//diff in time for navdata
+    long long int diff_ms_vid;//diff in time for video
+    int navdataCount;//Count of navdata messages. Is reset to 0 after every 200 messages
+    int videoCount;//Count of video messages. Is reset to 0 after every 30 messages
+
+
+    //The file streams for the delay output files for navdata and video
     std::fstream navdataFile;
     std::fstream videoFile;
 
 
   public:
+    //Variable to decide if delay files are to be written out.
     bool outputDelayFiles;
+
+    //The constructor
     mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh);
+
+    //The Destructor
     ~mqtt_bridge();
 
+    //Callback for when the mqtt client is connected
     void on_connect(int rc);
+
+    //Callback for when the mqtt client receives a message on a subscribed topic
     void on_message(const struct mosquitto_message *message);
+
+    //Callback for when the mqtt message succeeds in subscribing to a topic
     void on_subscribe(int mid, int qos_count, const int *granted_qos);
+
+    //Custom Function: Initializes the delay files. Called only when outputDelayFiles = true.
     void setupDelayFiles();
+
+    //Set the image and navdata publishers over ROS. Called in the constructor.
     void initPublishers();
+
+    //Callback redirects here when a Navdata message is received over MQTT. This function packages the data received
+    //over MQTT into a navMsg format for ROS. It then publishes that message out.
     void handleNavdata(const struct mosquitto_message *message);
+
+    //Callback redirects here when a CompressedImage Message is received over MQTT. This function is under development.
     void handleCompressedImage(const struct mosquitto_message *message);
+
+    //Callback reidrects here when a uncompressedImage message is received over MQTT. The timestamp is extracted and then 
+    //the file is packaged into an imageTransport message and sent as a ROS topic.
     void handleUncompressedImage(const struct mosquitto_message *message);
+
+    //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
     void takeOffMessageCallback(const std_msgs::Empty &msg);
+    
+    //This is a callback for receiving a land message on ROS. It is then sent over MQTT to be received by the sdk.
     void landMessageCallback(const std_msgs::Empty &msg);
 };
 
@@ -102,7 +136,6 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
 
   initPublishers();
 
-
   connect_async(host, port, keepalive);
 };
 
@@ -113,10 +146,6 @@ mqtt_bridge::~mqtt_bridge()
 void mqtt_bridge::on_connect(int rc)
 {
   printf("Connected with code %d.\n", rc);
-  if(rc == 0){
-    /* Only attempt to subscribe on a successful connect. */
-    subscribe(NULL, "temperature/celsius");
-  }
 }
 
 void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
@@ -141,12 +170,10 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
-  uint32_t org_sec; //= binn_object_uint32(obj, (char*)"time_sec");
-  uint32_t org_usec;// = binn_object_uint32(obj, (char*)"time_usec");
+  uint32_t org_sec;
+  uint32_t org_usec;
   memcpy(&org_sec, message->payload, 4);
   memcpy(&org_usec, message->payload + 4, 4);
-
-//  std::cout << "Image recd. with sec: " << org_sec << " and usec: " << org_usec << std::endl;
 
   uint32_t delaysec = (uint32_t)tv.tv_sec - org_sec;
 
@@ -185,7 +212,6 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   {
     std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
     imagePub_.publish(image_msg);
-//    std::cout << "Successfully Published Uncompressed Image on Ros topic" << std::endl;
     return;
   }
 }
@@ -252,19 +278,7 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
 
 void mqtt_bridge::on_message(const struct mosquitto_message *message)
 {
-  double temp_celsius, temp_farenheit;
-  char buf[51];
-  if(!strcmp(message->topic, "temperature/celsius")){
-    memset(buf, 0, 51*sizeof(char));
-    /* Copy N-1 bytes to ensure always 0 terminated. */
-    memcpy(buf, message->payload, 50*sizeof(char));
-    temp_celsius = atof(buf);
-    temp_farenheit = temp_celsius*9.0/5.0 + 32.0;
-    snprintf(buf, 50, "%f", temp_farenheit);
-    std::cout << "Temperature in F is: " << buf << std::endl;
-    publish(NULL, "temperature/farenheit", strlen(buf), buf);
-  }
-  else if(!strcmp(message->topic, "uas/uav1/navdata"))
+  if(!strcmp(message->topic, "uas/uav1/navdata"))
   {
     handleNavdata(message);
   }
@@ -276,8 +290,6 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
   {
     handleCompressedImage(message);
   }
-
-//  std::cout << "Received Message on topic " << message->topic << " length: " << message->payloadlen << std::endl;
 }
 
 void mqtt_bridge::on_subscribe(int mid, int qos_count, const int *granted_qos)
@@ -346,14 +358,12 @@ int main(int argc, char **argv)
   nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
   ros::param::get("/mqttReceiver/mqttBroker",broker);
 
-  //std::string address = broker + ":" + brokerPort;
   std::cout << "Connecting to " << broker << " at " << brokerPort << " port\n";
   
   class mqtt_bridge *mqttBridge;
 
   mosqpp::lib_init();
 
-  //  mqttBridge = new mqtt_bridge((const char*)"tempconv", (const char*)"localhost", 1883, nodeHandle);
   mqttBridge = new mqtt_bridge(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
   std::cout << "mqttBridge initialized..\n";
 

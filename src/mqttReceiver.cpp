@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Empty.h"
 #include <mosquittopp.h>
 #include <image_transport/image_transport.h>
 #include <sys/time.h>
@@ -76,7 +77,8 @@ class mqtt_bridge : public mosqpp::mosquittopp
     void handleNavdata(const struct mosquitto_message *message);
     void handleCompressedImage(const struct mosquitto_message *message);
     void handleUncompressedImage(const struct mosquitto_message *message);
-    void takeOffMessageCallback(const std_msgs::String::ConstPtr& msg);
+    void takeOffMessageCallback(const std_msgs::Empty &msg);
+    void landMessageCallback(const std_msgs::Empty &msg);
 };
 
 void mqtt_bridge::initPublishers()
@@ -127,6 +129,8 @@ void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
   else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
   else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
   else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
+
+  std::cout << "Compressed images are not yet handled properly" << std::endl;
 
   std::cout << "Uncompressed from " << message->payloadlen << " to " << imgDataLen << " bytes" << std::endl;
 
@@ -310,11 +314,18 @@ void mqtt_bridge::setupDelayFiles()
   videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 }
 
-void mqtt_bridge::takeOffMessageCallback(const std_msgs::String::ConstPtr& msg)
+void mqtt_bridge::takeOffMessageCallback(const std_msgs::Empty &msg)
 {
-  ROS_INFO("I heard: [%s]", msg->data.c_str());
+  ROS_INFO("I heard a takeoff Signal. Sending it out over MQTT.\n");
   std::string takeOff = "takeoff1";
   publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const void *)takeOff.data());
+}
+
+void mqtt_bridge::landMessageCallback(const std_msgs::Empty &msg)
+{
+  ROS_INFO("I heard a land Signal. Sending it out over MQTT.\n");
+  std::string land = "land";
+  publish(NULL, "/ardrone/land",  land.length() , (const void *)land.data());
 }
 
 
@@ -328,9 +339,11 @@ int main(int argc, char **argv)
 
   std::string broker = "tcp://unmand.io";
   std::string takeOffMsgTopic = "/ardrone/takeoff";
+  std::string landMsgTopic = "/ardrone/land";
   int brokerPort;
   nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);// = "1883";
+  nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
+  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
   ros::param::get("/mqttReceiver/mqttBroker",broker);
 
   //std::string address = broker + ":" + brokerPort;
@@ -344,12 +357,11 @@ int main(int argc, char **argv)
   mqttBridge = new mqtt_bridge(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
   std::cout << "mqttBridge initialized..\n";
 
-  
   ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
-
+  ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
  
   bool delayFiles = false;
-  nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);// = "1883";
+  nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);
 
   std::cout << "\nOutputDealyFiles set to " << delayFiles << std::endl;
   
@@ -373,20 +385,18 @@ int main(int argc, char **argv)
 
 
   int rc;
-  while(1){
+  while(ros::ok()){
     ros::spinOnce();
-    rc = mqttBridge->loop_start();
+    rc = mqttBridge->loop();
     if(rc){
       mqttBridge->reconnect_async();
     }
   }
 
-  mosqpp::lib_cleanup();
+  ROS_INFO("Disconnecting MQTT....\n");
+  mqttBridge->disconnect();
 
-  while(ros::ok())
-  {
-    loop_rate.sleep();
-  }
+  mosqpp::lib_cleanup();
 
   return 0;
 }

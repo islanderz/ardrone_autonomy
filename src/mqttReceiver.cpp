@@ -340,14 +340,17 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   //it seems like there are some unit conversions and nomenclature adaptations that need to be done
   //on the navdata for it to be acknowledged by the tum_ardrone.
 
-  int32_t pressure = binn_object_uint32(obj, (char*)"pressure");
+  navMsg.pressure = binn_object_uint32(obj, (char*)"pressure");
   navMsg.rotX = (binn_object_float(obj, (char*)"phi")) / 1000.0;
-  navMsg.rotY = (binn_object_float(obj, (char*)"theta")) / 1000.0;
-  navMsg.rotZ = (binn_object_float(obj, (char*)"psi")) / 1000.0;
+  navMsg.rotY = -1*(binn_object_float(obj, (char*)"theta")) / 1000.0;
+  navMsg.rotZ = -1*(binn_object_float(obj, (char*)"psi")) / 1000.0;
   navMsg.altd = binn_object_uint32(obj, (char*)"altitude");
   navMsg.vx = binn_object_float(obj, (char*)"vx");
   navMsg.vy = -1*binn_object_float(obj, (char*)"vy");
   navMsg.vz = -1*binn_object_float(obj, (char*)"vz");
+  navMsg.ax = (binn_object_float(obj, (char*)"ax")) / 1000.0;
+  navMsg.ay = -1*(binn_object_float(obj, (char*)"ay")) / 1000.0;
+  navMsg.az = -1*(binn_object_float(obj, (char*)"az")) / 1000.0;
   navMsg.motor1 = binn_object_uint32(obj, (char*)"motor1");
   navMsg.motor2 = binn_object_uint32(obj, (char*)"motor2");
   navMsg.motor3 = binn_object_uint32(obj, (char*)"motor3");

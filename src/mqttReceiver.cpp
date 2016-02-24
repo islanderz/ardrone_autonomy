@@ -113,6 +113,9 @@ class mqtt_bridge : public mosqpp::mosquittopp
     
     //This is a callback for receiving a land message on ROS. It is then sent over MQTT to be received by the sdk.
     void landMessageCallback(const std_msgs::Empty &msg);
+    
+    //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
+    void resetMessageCallback(const std_msgs::Empty &msg);
 };
 
 void mqtt_bridge::initPublishers()
@@ -340,6 +343,13 @@ void mqtt_bridge::landMessageCallback(const std_msgs::Empty &msg)
   publish(NULL, "/ardrone/land",  land.length() , (const void *)land.data());
 }
 
+void mqtt_bridge::resetMessageCallback(const std_msgs::Empty &msg)
+{
+  ROS_INFO("I heard a reset Signal. Sending it out over MQTT.\n");
+  std::string reset = "reset";
+  publish(NULL, "/ardrone/reset",  reset.length() , (const void *)reset.data());
+}
+
 
 int main(int argc, char **argv)
 {
@@ -352,9 +362,11 @@ int main(int argc, char **argv)
   std::string broker = "tcp://unmand.io";
   std::string takeOffMsgTopic = "/ardrone/takeoff";
   std::string landMsgTopic = "/ardrone/land";
+  std::string resetMsgTopic = "/ardrone/reset";
   int brokerPort;
   nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
   nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
+  nodeHandle.getParam("/mqttReceiver/resetMsgTopic", resetMsgTopic);
   nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
   ros::param::get("/mqttReceiver/mqttBroker",broker);
 
@@ -369,6 +381,7 @@ int main(int argc, char **argv)
 
   ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
   ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
+  ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &mqtt_bridge::resetMessageCallback, mqttBridge);
  
   bool delayFiles = false;
   nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);

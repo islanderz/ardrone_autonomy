@@ -18,6 +18,7 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
+#include "geometry_msgs/Twist.h"
 #include <mosquittopp.h>
 #include <image_transport/image_transport.h>
 #include <sys/time.h>
@@ -29,6 +30,7 @@ extern "C" {
 }
 #define QOS         0
 #define TIMEOUT     10000L
+#define _EPS 1.0e-6
 #include <iostream>
 #include <cstdlib>
 #include <string>
@@ -70,6 +72,13 @@ class mqtt_bridge : public mosqpp::mosquittopp
     //The file streams for the delay output files for navdata and video
     std::fstream navdataFile;
     std::fstream videoFile;
+
+    //Variables for handling the cmd_vel callback
+    
+    float old_left_right;
+    float old_front_back;
+    float old_up_down;
+    float old_turn;
 
 
   public:
@@ -116,6 +125,9 @@ class mqtt_bridge : public mosqpp::mosquittopp
     
     //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
     void resetMessageCallback(const std_msgs::Empty &msg);
+
+    //This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
+    void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
 };
 
 void mqtt_bridge::initPublishers()
@@ -136,6 +148,11 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
   navdataCount = 0;
   videoCount = 0;
   outputDelayFiles = 0;
+    
+  old_left_right = -10.0;
+  old_front_back = -10.0;
+  old_up_down = -10.0;
+  old_turn = -10.0;
 
   initPublishers();
 
@@ -350,6 +367,68 @@ void mqtt_bridge::resetMessageCallback(const std_msgs::Empty &msg)
   publish(NULL, "/ardrone/reset",  reset.length() , (const void *)reset.data());
 }
 
+void mqtt_bridge::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
+{
+  //Code taken from CmdVelCallback in src/teleop_twist.cpp in the ardrone_autonomy package 
+  //Code also taken from updateTeleop function in src/teleop_twist.cpp
+
+  float left_right = static_cast<float>(std::max(std::min(-msg->linear.y, 1.0), -1.0));
+  float front_back = static_cast<float>(std::max(std::min(-msg->linear.x, 1.0), -1.0));
+  float up_down = static_cast<float>(std::max(std::min(msg->linear.z, 1.0), -1.0));
+  float turn = static_cast<float>(std::max(std::min(-msg->angular.z, 1.0), -1.0));
+
+  bool is_changed = !(
+      (fabs(left_right - old_left_right) < _EPS) &&
+      (fabs(front_back - old_front_back) < _EPS) &&
+      (fabs(up_down - old_up_down) < _EPS) &&
+      (fabs(turn - old_turn) < _EPS));
+
+  // These lines are for testing, they should be moved to configurations
+  // Bit 0 of control_flag == 0: should we hover?
+  // Bit 1 of control_flag == 1: should we use combined yaw mode?
+
+  int32_t control_flag = 0x00;
+  int32_t combined_yaw = 0x00;
+  // Auto hover detection based on ~0 values for 4DOF cmd_vel
+  int32_t hover = (int32_t)
+    (
+     (fabs(left_right) < _EPS) &&
+     (fabs(front_back) < _EPS) &&
+     (fabs(up_down) < _EPS) &&
+     (fabs(turn) < _EPS) &&
+     // Set angular.x or angular.y to a non-zero value to disable entering hover
+     // even when 4DOF control command is ~0
+     (fabs(msg->angular.x) < _EPS) &&
+     (fabs(msg->angular.y) < _EPS));
+
+  control_flag |= ((1 - hover) << 0);
+  control_flag |= (combined_yaw << 1);
+  // ROS_INFO (">>> Control Flag: %d", control_flag);
+
+  old_left_right = left_right;
+  old_front_back = front_back;
+  old_up_down = up_down;
+  old_turn = turn;
+  // is_changed = true;
+  if ((is_changed) || (hover))
+  {
+    // ardrone_tool_set_progressive_cmd(control_flag, left_right, front_back, up_down, turn, 0.0, 0.0);
+
+    binn* obj;
+    obj = binn_object();
+
+    binn_object_set_int32(obj, "control_flag", control_flag);
+    binn_object_set_float(obj, "left_right", left_right);
+    binn_object_set_float(obj, "front_back", front_back);
+    binn_object_set_float(obj, "up_down", up_down);
+    binn_object_set_float(obj, "turn", turn);
+
+    publish(NULL, "/ardrone/cmd_vel", binn_size(obj), binn_ptr(obj));
+
+    binn_free(obj);
+  }
+}
+
 
 int main(int argc, char **argv)
 {
@@ -382,6 +461,7 @@ int main(int argc, char **argv)
   ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
   ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
   ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &mqtt_bridge::resetMessageCallback, mqttBridge);
+  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe("/cmd_vel", 1, &mqtt_bridge::CmdVelCallback, mqttBridge);
  
   bool delayFiles = false;
   nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);

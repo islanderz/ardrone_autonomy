@@ -146,7 +146,8 @@ add_dependencies(ardrone_driver ardronelib ${PROJECT_NAME}_gencpp)
 add_executable(mqttReceiver src/mqttReceiver.cpp)
 target_link_libraries(mqttReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
 
-
+add_executable(mqttSender src/mqttSender.cpp)
+target_link_libraries(mqttSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
 
 # roslint
 set(ROSLINT_CPP_OPTS "--filter=-runtime/references-runtime/threadsafe_fn")

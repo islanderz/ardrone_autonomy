@@ -1,6 +1,6 @@
 /*******************************************************************************
  * Copyright (c) 2013 Frank Pagliughi <fpagliughi@mindspring.com>
-   Edited by: 2016 Harshit Sureka <harshit.sureka@gmail.com>
+   Edited by: Dec 2016 Harshit Sureka <harshit.sureka@gmail.com>
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -41,12 +41,12 @@ extern "C" {
 
 /////////////////////////////////////////////////////////////////////////////
 
-std::string CLIENTID("mqttReceiver");
+std::string CLIENTID("mqttSender");
 
 //Extend class mosquittopp from the /usr/include/mosquittopp.h file 
 //This class provides all the basic functions for mqtt and 
 //virtual callback functions that are implemented
-class mqtt_bridge : public mosquittopp::mosquittopp
+class MQTTSender : public mosquittopp::mosquittopp
 {
   private:
     //ros nodehandle to handle ROS Topics publishes and subscribes
@@ -56,10 +56,10 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     image_transport::ImageTransport it_;
 
     //The publisher for navdata on ROS topic
-    ros::Publisher navdataPub_;
+    //ros::Publisher navdataPub_;
 
     //The publisher for images on ROS topic
-    image_transport::Publisher imagePub_;
+    //image_transport::Publisher imagePub_;
 
 
     //Variables to calculate the delay of a message. 
@@ -92,10 +92,10 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     bool outputDelayFiles;
 
     //The constructor
-    mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh);
+    MQTTSender(const char *id, const char *host, int port, ros::NodeHandle nh);
 
     //The Destructor
-    ~mqtt_bridge();
+    ~MQTTSender();
 
     //Callback for when the mqtt client is connected
     void on_connect(int rc);
@@ -109,8 +109,7 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     //Custom Function: Initializes the delay files. Called only when outputDelayFiles = true.
     void setupDelayFiles();
 
-    //Set the image and navdata publishers over ROS. Called in the constructor.
-    void initPublishers();
+		//void initPublishers();
 
     //Callback redirects here when a Navdata message is received over MQTT. This function packages the data received
     //over MQTT into a navMsg format for ROS. It then publishes that message out.
@@ -123,23 +122,30 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     //the file is packaged into an imageTransport message and sent as a ROS topic.
     void handleUncompressedImage(const struct mosquitto_message *message);
 
+    //This is a callback for receiving a navdata msg over ROS. It is then sent over MQTT.
+    void navdataMessageCallback(const ardrone_autonomy::Navdata &msg);
+
+    //This is a callback for receiving an image msg over ROS. It is then sent over MQTT.
+    void imageMessageCallback(const sensor_msgs::Image &msg);
+
     //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
-    void takeOffMessageCallback(const std_msgs::Empty &msg);
+    //void takeOffMessageCallback(const std_msgs::Empty &msg);
     
     //This is a callback for receiving a land message on ROS. It is then sent over MQTT to be received by the sdk.
-    void landMessageCallback(const std_msgs::Empty &msg);
+    //void landMessageCallback(const std_msgs::Empty &msg);
     
     //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
-    void resetMessageCallback(const std_msgs::Empty &msg);
+    //void resetMessageCallback(const std_msgs::Empty &msg);
 
     //This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
-    void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
+    //void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
 };
 
 
 //Initialize the publishers that send the message over ROS topics. 
 //This is called in the constructor.
-void mqtt_bridge::initPublishers()
+/*
+void MQTTSender::initPublishers()
 {
   //The publisher for ROS navdata on ardrone/navdata
   navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("ardrone/navdata", 200);
@@ -147,11 +153,11 @@ void mqtt_bridge::initPublishers()
   //The publisher for ROS image messages on ardrone/image_raw
   imagePub_ = it_.advertise("ardrone/image_raw", 10); 
 }
-
+*/
 
 //The Constructor
 //Intializes Variables, Intializes publishers, Connects the mqtt client.
-mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh) : 
+MQTTSender::MQTTSender(const char *id, const char *host, int port, ros::NodeHandle nh) : 
   mosquittopp(id),
   nh_(nh), 
   it_(nh)
@@ -169,19 +175,19 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
   old_turn = -10.0;
 
   //initialize the navdata and img ros publishers
-  initPublishers();
+//  initPublishers();
 
   //Connect this class instance to the mqtt host and port.
   connect(host, port, keepalive);
 };
 
 //Destructor
-mqtt_bridge::~mqtt_bridge()
+MQTTSender::~MQTTSender()
 {
 }
 
 //Callback when the mqtt client successfully connects. rc = 0 means successful connection.
-void mqtt_bridge::on_connect(int rc)
+void MQTTSender::on_connect(int rc)
 {
   printf("Connected with code %d.\n", rc);
 }
@@ -189,7 +195,7 @@ void mqtt_bridge::on_connect(int rc)
 
 //The callback when mqtt receives a compressed images. There are several
 //errors in the uncompression, so this is temporarily being removed.
-void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
+void MQTTSender::handleCompressedImage(const struct mosquitto_message *message)
 {
   std::cout << "Compressed Images aren't fully handled yet....\n";
   
@@ -213,7 +219,7 @@ void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
 //The images are prefixed by a timestamp which is extracted and then
 //the image data is packed in a ROS Image_Transport message and published
 //over the ROS Topic /ardrone/image_raw
-void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *message)
+void MQTTSender::handleUncompressedImage(const struct mosquitto_message *message)
 {
   //Get the current time
   struct timeval tv;
@@ -279,7 +285,7 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   {
     //copy image data from the incoming message to the data section of the outgoing message
     std::copy(imgData, imgData + imgDataLen, image_msg.data.begin());
-    imagePub_.publish(image_msg);
+    //magePub_.publish(image_msg);
   }
   else
   {
@@ -287,7 +293,7 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   }
   return;
 }
-void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
+void MQTTSender::handleNavdata(const struct mosquitto_message *message)
 {
   //Get the current time
   struct timeval tv;
@@ -359,7 +365,7 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   navMsg.tm = (tm & 0x001FFFFF) + (tm >> 21) * 1000000;
 
   //Send this message over on ROS Topic.
-  navdataPub_.publish(navMsg);
+  //navdataPub_.publish(navMsg);
 
   //Free the memory used by the binn pointer.
   binn_free(obj);
@@ -369,7 +375,7 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
 
 //When we receive a mqtt message, this callback is called. It just calls the responsible function
 //depending on the topic of the mqtt message that was received.
-void mqtt_bridge::on_message(const struct mosquitto_message *message)
+void MQTTSender::on_message(const struct mosquitto_message *message)
 {
   if(!strcmp(message->topic, "uas/uav1/navdata"))
   {
@@ -386,7 +392,7 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
-void mqtt_bridge::on_subscribe(int mid, int qos_count, const int *granted_qos)
+void MQTTSender::on_subscribe(int mid, int qos_count, const int *granted_qos)
 {
   printf("Subscription succeeded.\n");
 }
@@ -394,7 +400,7 @@ void mqtt_bridge::on_subscribe(int mid, int qos_count, const int *granted_qos)
 //The function that is called if we are outputting delays to a file. This function
 //creates those files and writes the headers to them. The filenames contain
 //the date and time of the run.
-void mqtt_bridge::setupDelayFiles()
+void MQTTSender::setupDelayFiles()
 {
   struct tm *navdata_atm = NULL;
   struct timeval tv;
@@ -424,15 +430,54 @@ void mqtt_bridge::setupDelayFiles()
 }
 
 //This function is called when a takeoff message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::takeOffMessageCallback(const std_msgs::Empty &msg)
+//void MQTTSender::takeOffMessageCallback(const std_msgs::Empty &msg)
+//{
+//  ROS_INFO("I heard a takeoff Signal. Sending it out over MQTT.\n");
+// std::string takeOff = "takeoff1";
+//  publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const uint8_t *)takeOff.data());
+//}
+
+void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 {
-  ROS_INFO("I heard a takeoff Signal. Sending it out over MQTT.\n");
-  std::string takeOff = "takeoff1";
-  publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const uint8_t *)takeOff.data());
+	ROS_INFO("I heard a image message over ROS. Sending it out over MQTT.\n");
+	unsigned long sendDataSize = 0;
+
+	sendDataSize = msg.step * msg.height;
+
+	//Get the current time
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	//Extract the seconds and microseconds from the current time
+	uint32_t seconds = (uint32_t)tv.tv_sec;
+	uint32_t useconds = (uint32_t)tv.tv_usec;
+
+	//Create a new buffer that we would send. It contains the image data + 8 bytes (4*2 for each seconds and microseconds addition)
+	uint8_t* bufWithTimestamp = (uint8_t*)malloc(sendDataSize + 8);
+
+	//Copy the seconds field to the first 4 bytes
+	memcpy(bufWithTimestamp, &seconds, 4);
+
+	//Copy the microseconds field to the next 4 bytes
+	memcpy(bufWithTimestamp + 4, &useconds, 4);
+
+	//Copy the image data in rest of the buffer
+//	memcpy(bufWithTimestamp + 8, msg.data.begin(), sendDataSize);
+	std::copy(msg.data.begin(), msg.data.end(), bufWithTimestamp + 8);
+
+	//Send the image buffer with Timestamp over MQTT.
+	publish(NULL, "/ardrone/image", sendDataSize + 8, bufWithTimestamp);
+//	int ret = mosquitto_publish (vidmosq, NULL, "uas/uav1/uncompressedImageStream", sendDataSize + 8, bufWithTimestamp, 0, false);
+//	if (ret)
+//	{
+//		fprintf (stderr, "VidClient: Can't publish to Mosquitto server\n");
+//	}
+
+
 }
 
 //This function is called when a land message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::landMessageCallback(const std_msgs::Empty &msg)
+/*
+void MQTTSender::landMessageCallback(const std_msgs::Empty &msg)
 {
   ROS_INFO("I heard a land Signal. Sending it out over MQTT.\n");
   std::string land = "land";
@@ -440,7 +485,7 @@ void mqtt_bridge::landMessageCallback(const std_msgs::Empty &msg)
 }
 
 //This function is called when a reset message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::resetMessageCallback(const std_msgs::Empty &msg)
+void MQTTSender::resetMessageCallback(const std_msgs::Empty &msg)
 {
   ROS_INFO("I heard a reset Signal. Sending it out over MQTT.\n");
   std::string reset = "reset";
@@ -449,7 +494,7 @@ void mqtt_bridge::resetMessageCallback(const std_msgs::Empty &msg)
 
 //This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.
 //This message is usually sent by the tum_ardrone.
-void mqtt_bridge::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
+void MQTTSender::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
 {
   //Code taken from CmdVelCallback in src/teleop_twist.cpp in the ardrone_autonomy package 
   //Code also taken from updateTeleop function in src/teleop_twist.cpp
@@ -517,7 +562,7 @@ void mqtt_bridge::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
     binn_free(obj);
   }
 }
-
+*/
 int main(int argc, char **argv)
 {
   //Start with a new random client ID each time, so that prev messages aren't a hassle.
@@ -525,66 +570,70 @@ int main(int argc, char **argv)
   CLIENTID += std::to_string(rand());
 
   //Mandatory ROS INIT call for this file to be registered as a ROS NODE. 
-  ros::init(argc, argv, "mqttReceiver");
+  ros::init(argc, argv, "mqttSender");
   ros::NodeHandle nodeHandle;
 
   //Initialize different variables that are to be read from the parameter file.
   std::string broker = "localhost";
+  
   std::string takeOffMsgTopic = "/ardrone/takeoff";
   std::string landMsgTopic = "/ardrone/land";
   std::string resetMsgTopic = "/ardrone/reset";
   std::string cmdVelMsgTopic = "/cmd_vel";
+	std::string imageMsgTopic = "/ardrone/image_raw";
   int brokerPort = 1883;
 
   //Read the variables from the parameter launch file. If the variable is not mentioned
   //in the parameter launch file, the defaults defined above are used. 
-  nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/resetMsgTopic", resetMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/cmdVelMsgTopic", cmdVelMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
-  ros::param::get("/mqttReceiver/mqttBroker", broker);
+  nodeHandle.getParam("/mqttSender/takeOffMsgTopic", takeOffMsgTopic);
+  nodeHandle.getParam("/mqttSender/landMsgTopic", landMsgTopic);
+  nodeHandle.getParam("/mqttSender/resetMsgTopic", resetMsgTopic);
+  nodeHandle.getParam("/mqttSender/cmdVelMsgTopic", cmdVelMsgTopic);
+  nodeHandle.getParam("/mqttSender/imageMsgTopic", brokerPort);
+  nodeHandle.getParam("/mqttSender/mqttBrokerPort", brokerPort);
+  ros::param::get("/mqttSender/mqttBroker", broker);
 
   std::cout << "Connecting to " << broker << " at " << brokerPort << " port\n";
   
-  //Initialize the mqttBridge class instance
-  class mqtt_bridge *mqttBridge;
+  //Initialize the mqttSender class instance
+  class MQTTSender *mqttSender;
 
-  mqttBridge->lib_init();
+  mqttSender->lib_init();
 
-  mqttBridge = new mqtt_bridge(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
-  std::cout << "mqttBridge initialized..\n";
+  mqttSender = new MQTTSender(CLIENTID.c_str(), broker.c_str(), brokerPort, nodeHandle);
+  std::cout << "mqttSender initialized..\n";
 
 
   //Here, we are subscribing to 4 ROS topics. These topics are published by tum_ardrone. Each topic is handled
   //by a separate callback which is the 3rd argument of the function calls below. On receipt of a message
   //the appropriate callback is called.
-  ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
-  ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
-  ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &mqtt_bridge::resetMessageCallback, mqttBridge);
-  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &mqtt_bridge::CmdVelCallback, mqttBridge);
+  //ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &MQTTSender::takeOffMessageCallback, mqttSender);
+  //ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &MQTTSender::landMessageCallback, mqttSender);
+  //ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &MQTTSender::resetMessageCallback, mqttSender);
+ // ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &MQTTSender::CmdVelCallback, mqttSender);
+	ros::Subscriber image_sub = nodeHandle.subscribe(imageMsgTopic, 1, &MQTTSender::imageMessageCallback, mqttSender);
  
   /*****/
   //Get the variable from the parameter launch file whether or not to ouput delays to a file
-  //If so, then setup the delay files and let the mqtt_bridge know that it needs to print values
+  //If so, then setup the delay files and let the MQTTSender know that it needs to print values
   //to the files.
   bool delayFiles = false;
-  nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);
+  nodeHandle.getParam("/mqttSender/outputDelayFiles", delayFiles);
   std::cout << "\nOutputDealyFiles set to " << delayFiles << std::endl;
   if(delayFiles)
   {
-    //Setting this to true tells the mqttBridge class instance that whenever new navdata and image message is received, 
+    //Setting this to true tells the mqttSender class instance that whenever new navdata and image message is received, 
     //delay values need to be printed to those files.
-    mqttBridge->outputDelayFiles = true;
+    mqttSender->outputDelayFiles = true;
 
     //This function sets up the output files and writes the headers to them.
-    mqttBridge->setupDelayFiles();
+    mqttSender->setupDelayFiles();
   }
   /******/
 
   //Get the list of topics to subscribe to from the launch file
   std::vector<std::string> topicsList;
-  ros::param::get("/mqttReceiver/topicsList",topicsList);
+  ros::param::get("/mqttSender/topicsList",topicsList);
 
   //Iterate over the topics list and subscribe to each.
   //Each successful subscribe should print a "Subscribe Succeeded" message.
@@ -595,7 +644,7 @@ int main(int argc, char **argv)
       << " using QoS" << QOS << "\n\n";
 
     //Subscribe to each topic. On success the callback function on_subscribe(..) is called.
-    mqttBridge->subscribe(NULL, topicsList[i].c_str());
+    mqttSender->subscribe(NULL, topicsList[i].c_str());
   }
 
   int rc;
@@ -609,21 +658,21 @@ int main(int argc, char **argv)
 
     //Pump all MQTT callbacks. This function pushes all messages on the MQTT Subscribed topics and calls the message_callback 
     //function defined for the mosquitto instance. The callback function handles different topics internally.
-    rc = mqttBridge->loop();
+    rc = mqttSender->loop();
 
     //If the mqtt connection is giving any troubles. Try to reconnect.
     if(rc){
-      mqttBridge->reconnect();
+      mqttSender->reconnect();
     }
   }
 
   ROS_INFO("Disconnecting MQTT....\n");
 
   //Cleanup the Connection
-  mqttBridge->disconnect();
+  mqttSender->disconnect();
 
   //Cleanup the Mosquitto Library.
-  mqttBridge->lib_cleanup();
+  mqttSender->lib_cleanup();
 
   return 0;
 }

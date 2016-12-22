@@ -127,7 +127,7 @@ class MQTTSender : public mosquittopp::mosquittopp
 
     //This is a callback for receiving an image msg over ROS. It is then sent over MQTT.
     void imageMessageCallback(const sensor_msgs::Image &msg);
-
+    
     //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
     //void takeOffMessageCallback(const std_msgs::Empty &msg);
     
@@ -137,8 +137,8 @@ class MQTTSender : public mosquittopp::mosquittopp
     //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
     //void resetMessageCallback(const std_msgs::Empty &msg);
 
-    //This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
-    //void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
+   // This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
+    void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
 };
 
 
@@ -437,6 +437,61 @@ void MQTTSender::setupDelayFiles()
 //  publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const uint8_t *)takeOff.data());
 //}
 
+    
+void MQTTSender::navdataMessageCallback(const ardrone_autonomy::Navdata &msg)
+{
+	binn* obj;
+	obj = binn_object();
+
+	binn_object_set_uint32(obj, "batteryPercent", msg.batteryPercent);
+	binn_object_set_uint32(obj, "state", msg.state);
+	binn_object_set_int32(obj, "magX", msg.magX);
+	binn_object_set_int32(obj, "magY", msg.magY);
+	binn_object_set_int32(obj, "magZ", msg.magZ);
+	binn_object_set_int32(obj, "pressure", msg.pressure);
+	binn_object_set_int32(obj, "temp", msg.temp);
+	binn_object_set_float(obj, "wind_speed", msg.wind_speed);
+	binn_object_set_float(obj, "wind_angle", msg.wind_angle);
+	binn_object_set_float(obj, "wind_comp_angle", msg.wind_comp_angle);
+
+	binn_object_set_float(obj, "rotX", msg.rotX);
+	binn_object_set_float(obj, "rotY", msg.rotY);
+	binn_object_set_float(obj, "rotZ", msg.rotZ);
+	binn_object_set_int32(obj, "altd", msg.altd);
+	binn_object_set_float(obj, "vx", msg.vx);
+	binn_object_set_float(obj, "vy", msg.vy);
+	binn_object_set_float(obj, "vz", msg.vz);
+	binn_object_set_float(obj, "ax", msg.ax);
+	binn_object_set_float(obj, "ay", msg.ay);
+	binn_object_set_float(obj, "az", msg.az);
+
+	binn_object_set_uint32(obj, "motor1", msg.motor1);
+	binn_object_set_uint32(obj, "motor2", msg.motor2);
+	binn_object_set_uint32(obj, "motor3", msg.motor3);
+	binn_object_set_uint32(obj, "motor4", msg.motor4);
+	
+	//sureka: ignoring tags_count, and other tag msgs.
+	
+	binn_object_set_uint32(obj, "tm", msg.tm);
+
+	//Add the timestamp
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	binn_object_set_uint32(obj, "time_sec", (uint32_t)tv.tv_sec);
+	binn_object_set_uint32(obj, "time_usec", (uint32_t)tv.tv_usec);
+
+	//publish data from the binn using mqtt
+//	int ret = mosquitto_publish (navmosq, NULL, "uas/uav1/navdata", binn_size(obj), binn_ptr(obj), 0, false);
+	ROS_INFO("I heard a navdata message of size %d over ROS. Sending out over MQTT.\n",binn_size(obj));
+	publish(NULL, "/ardrone/navdata", binn_size(obj), (const uint8_t *)binn_ptr(obj));
+//	if (ret)
+//	{
+//		fprintf (stderr, "NavClient: Can't publish to Mosquitto server\n");
+//	}
+
+	// release the buffer
+	binn_free(obj);
+}
 void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 {
 	unsigned long sendDataSize = 0;
@@ -491,7 +546,7 @@ void MQTTSender::resetMessageCallback(const std_msgs::Empty &msg)
   std::string reset = "reset";
   publish(NULL, "/ardrone/reset",  reset.length() , (const uint8_t *)reset.data());
 }
-
+*/
 //This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.
 //This message is usually sent by the tum_ardrone.
 void MQTTSender::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
@@ -499,9 +554,8 @@ void MQTTSender::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
   //Code taken from CmdVelCallback in src/teleop_twist.cpp in the ardrone_autonomy package 
   //Code also taken from updateTeleop function in src/teleop_twist.cpp
 
-//  ROS_INFO("I heard a cmd_vel Signal. Sending it out over MQTT.\n");
   
-  //Check the bounds of the values are between -1 and 1. All other are out-of-range values.
+/*  //Check the bounds of the values are between -1 and 1. All other are out-of-range values.
   float left_right = static_cast<float>(std::max(std::min(-msg->linear.y, 1.0), -1.0));
   float front_back = static_cast<float>(std::max(std::min(-msg->linear.x, 1.0), -1.0));
   float up_down = static_cast<float>(std::max(std::min(msg->linear.z, 1.0), -1.0));
@@ -545,24 +599,25 @@ void MQTTSender::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
   if ((is_changed) || (hover))
   {
     //If commands have changed or we are hovering, package data in a binn format and send it over MQTT
-
+*/
     binn* obj;
     obj = binn_object();
 
-    binn_object_set_int32(obj, "control_flag", control_flag);
-    binn_object_set_float(obj, "left_right", left_right);
-    binn_object_set_float(obj, "front_back", front_back);
-    binn_object_set_float(obj, "up_down", up_down);
-    binn_object_set_float(obj, "turn", turn);
+    binn_object_set_float(obj, "linearX", msg->linear.x);
+    binn_object_set_float(obj, "linearY", msg->linear.y);
+    binn_object_set_float(obj, "linearZ", msg->linear.z);
+    binn_object_set_float(obj, "angularX", msg->angular.x);
+    binn_object_set_float(obj, "angularY", msg->angular.y);
+    binn_object_set_float(obj, "angularZ", msg->angular.z);
 
     //publish over the mqtt topic
     publish(NULL, "/ardrone/cmd_vel", binn_size(obj), (const uint8_t *)binn_ptr(obj));
+    ROS_INFO("I heard a cmd_vel Signal size %d. Sending it out over MQTT.\n", binn_size(obj));
 
     //free the binn object
     binn_free(obj);
-  }
+ // }
 }
-*/
 int main(int argc, char **argv)
 {
   //Start with a new random client ID each time, so that prev messages aren't a hassle.
@@ -581,6 +636,7 @@ int main(int argc, char **argv)
   std::string resetMsgTopic = "/ardrone/reset";
   std::string cmdVelMsgTopic = "/cmd_vel";
 	std::string imageMsgTopic = "/ardrone/image_raw";
+	std::string navdataMsgTopic = "/ardrone/navdata";
   int brokerPort = 1883;
 
   //Read the variables from the parameter launch file. If the variable is not mentioned
@@ -589,7 +645,8 @@ int main(int argc, char **argv)
   nodeHandle.getParam("/mqttSender/landMsgTopic", landMsgTopic);
   nodeHandle.getParam("/mqttSender/resetMsgTopic", resetMsgTopic);
   nodeHandle.getParam("/mqttSender/cmdVelMsgTopic", cmdVelMsgTopic);
-  nodeHandle.getParam("/mqttSender/imageMsgTopic", brokerPort);
+  nodeHandle.getParam("/mqttSender/imageMsgTopic", imageMsgTopic);
+  nodeHandle.getParam("/mqttSender/navdataMsgTopic", navdataMsgTopic);
   nodeHandle.getParam("/mqttSender/mqttBrokerPort", brokerPort);
   ros::param::get("/mqttSender/mqttBroker", broker);
 
@@ -610,8 +667,9 @@ int main(int argc, char **argv)
   //ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &MQTTSender::takeOffMessageCallback, mqttSender);
   //ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &MQTTSender::landMessageCallback, mqttSender);
   //ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &MQTTSender::resetMessageCallback, mqttSender);
- // ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &MQTTSender::CmdVelCallback, mqttSender);
+  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &MQTTSender::CmdVelCallback, mqttSender);
 	ros::Subscriber image_sub = nodeHandle.subscribe(imageMsgTopic, 1, &MQTTSender::imageMessageCallback, mqttSender);
+  ros::Subscriber navdata_sub = nodeHandle.subscribe(navdataMsgTopic, 1, &MQTTSender::navdataMessageCallback, mqttSender);
  
   /*****/
   //Get the variable from the parameter launch file whether or not to ouput delays to a file

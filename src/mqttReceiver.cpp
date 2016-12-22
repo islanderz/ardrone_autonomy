@@ -383,7 +383,7 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
   {
     handleCompressedImage(message);
   }
-	std::cout << "Received message with length: " << message->payloadlen << std::endl;
+	std::cout << "Received message with length: " << message->payloadlen << " on topic: " << message->topic << std::endl;
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
@@ -599,6 +599,8 @@ int main(int argc, char **argv)
     mqttBridge->subscribe(NULL, topicsList[i].c_str());
   }
 	mqttBridge->subscribe(NULL, "/ardrone/image");
+	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
+	mqttBridge->subscribe(NULL, "/ardrone/navdata");
 
   int rc;
 

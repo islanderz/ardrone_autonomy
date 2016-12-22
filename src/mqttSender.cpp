@@ -439,11 +439,11 @@ void MQTTSender::setupDelayFiles()
 
 void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 {
-	ROS_INFO("I heard a image message over ROS. Sending it out over MQTT.\n");
 	unsigned long sendDataSize = 0;
 
 	sendDataSize = msg.step * msg.height;
 
+	ROS_INFO("I heard a image message of size %d over ROS. Sending %d out over MQTT.\n",sendDataSize, sendDataSize + 8);
 	//Get the current time
 	struct timeval tv;
 	gettimeofday(&tv, NULL);

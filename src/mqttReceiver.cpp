@@ -61,6 +61,8 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     //The publisher for images on ROS topic
     image_transport::Publisher imagePub_;
 
+//		geometry_msgs::Publisher cmdVelPub_;
+
 
     //Variables to calculate the delay of a message. 
     
@@ -117,23 +119,25 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     void handleNavdata(const struct mosquitto_message *message);
 
     //Callback redirects here when a CompressedImage Message is received over MQTT. This function is under development.
-    void handleCompressedImage(const struct mosquitto_message *message);
+    //void handleCompressedImage(const struct mosquitto_message *message);
 
     //Callback reidrects here when a uncompressedImage message is received over MQTT. The timestamp is extracted and then 
     //the file is packaged into an imageTransport message and sent as a ROS topic.
     void handleUncompressedImage(const struct mosquitto_message *message);
 
+		void handleCmdVel(const struct mosquitto_message *message);
+
     //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
-    void takeOffMessageCallback(const std_msgs::Empty &msg);
+    //void takeOffMessageCallback(const std_msgs::Empty &msg);
     
     //This is a callback for receiving a land message on ROS. It is then sent over MQTT to be received by the sdk.
-    void landMessageCallback(const std_msgs::Empty &msg);
+    //void landMessageCallback(const std_msgs::Empty &msg);
     
     //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
-    void resetMessageCallback(const std_msgs::Empty &msg);
+    //void resetMessageCallback(const std_msgs::Empty &msg);
 
     //This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
-    void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
+    //void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
 };
 
 
@@ -141,11 +145,13 @@ class mqtt_bridge : public mosquittopp::mosquittopp
 //This is called in the constructor.
 void mqtt_bridge::initPublishers()
 {
-  //The publisher for ROS navdata on ardrone/navdata
-  navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("ardrone/navdata", 200);
+  //The publisher for ROS navdata on tum_ardrone/navdata
+  navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("tum_ardrone/navdata", 200);
 
-  //The publisher for ROS image messages on ardrone/image_raw
-  imagePub_ = it_.advertise("ardrone/image_raw", 10); 
+  //The publisher for ROS image messages on tum_ardrone/image
+  imagePub_ = it_.advertise("tum_ardrone/image", 10); 
+  
+	//cmdVelPub_ = it_.advertise("tum_ardrone/cmd", 10); 
 }
 
 
@@ -189,6 +195,7 @@ void mqtt_bridge::on_connect(int rc)
 
 //The callback when mqtt receives a compressed images. There are several
 //errors in the uncompression, so this is temporarily being removed.
+/*
 void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
 {
   std::cout << "Compressed Images aren't fully handled yet....\n";
@@ -207,6 +214,11 @@ void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
   //std::cout << "Uncompressed from " << message->payloadlen << " to " << imgDataLen << " bytes" << std::endl;
 
   return;
+}
+*/
+void mqtt_bridge::handleCmdVel(const struct mosquitto_message *message)
+{
+	ROS_INFO("not handling CmdVel Msg right now\n");
 }
 
 //This is the function which handles the incoming images over MQTT.
@@ -333,30 +345,32 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   //from the serialized binn structure. We are also performing operations that mirror the operations that 
   //are being perfromed by void ARDroneDriver::PublishNavdata(..) in the ardrone_autonomy ardrone_driver.cpp file in ROS
 
-  navMsg.batteryPercent = binn_object_uint32(obj, (char*)"vbat_flying_percentage");
-  uint32_t ctrl_state = binn_object_uint32(obj, (char*)"ctrl_state");
-  navMsg.state = ctrl_state >> 16;
+  navMsg.batteryPercent = binn_object_uint32(obj, (char*)"batteryPercent");
+  navMsg.state = binn_object_uint32(obj, (char*)"state");
 
-  //it seems like there are some unit conversions and nomenclature adaptations that need to be done
-  //on the navdata for it to be acknowledged by the tum_ardrone.
-
-  navMsg.pressure = binn_object_uint32(obj, (char*)"pressure");
-  navMsg.rotX = (binn_object_float(obj, (char*)"phi")) / 1000.0;
-  navMsg.rotY = -1*(binn_object_float(obj, (char*)"theta")) / 1000.0;
-  navMsg.rotZ = -1*(binn_object_float(obj, (char*)"psi")) / 1000.0;
-  navMsg.altd = binn_object_uint32(obj, (char*)"altitude");
-  navMsg.vx = binn_object_float(obj, (char*)"vx");
-  navMsg.vy = -1*binn_object_float(obj, (char*)"vy");
-  navMsg.vz = -1*binn_object_float(obj, (char*)"vz");
-  navMsg.ax = (binn_object_float(obj, (char*)"ax")) / 1000.0;
-  navMsg.ay = -1*(binn_object_float(obj, (char*)"ay")) / 1000.0;
-  navMsg.az = -1*(binn_object_float(obj, (char*)"az")) / 1000.0;
-  navMsg.motor1 = binn_object_uint32(obj, (char*)"motor1");
-  navMsg.motor2 = binn_object_uint32(obj, (char*)"motor2");
-  navMsg.motor3 = binn_object_uint32(obj, (char*)"motor3");
-  navMsg.motor4 = binn_object_uint32(obj, (char*)"motor4");
-  uint32_t tm = binn_object_uint32(obj, (char*)"tm");
-  navMsg.tm = (tm & 0x001FFFFF) + (tm >> 21) * 1000000;
+	navMsg.magX 			= binn_object_uint32(obj, (char*)"magX");
+	navMsg.magY 			= binn_object_uint32(obj, (char*)"magY");
+	navMsg.magZ 			= binn_object_uint32(obj, (char*)"magZ");
+  navMsg.pressure 	= binn_object_uint32(obj, (char*)"pressure");
+  navMsg.temp			 	= binn_object_uint32(obj, (char*)"temp");
+	navMsg.wind_speed = binn_object_float(obj, (char*)"wind_speed");
+	navMsg.wind_angle = binn_object_float(obj, (char*)"wind_angle");
+	navMsg.wind_comp_angle = binn_object_float(obj, (char*)"wind_comp_angle");
+  navMsg.rotX				= binn_object_float(obj, (char*)"rotX");
+  navMsg.rotY 			= binn_object_float(obj, (char*)"rotY");
+  navMsg.rotZ 			= binn_object_float(obj, (char*)"rotZ");
+  navMsg.altd 			= binn_object_uint32(obj, (char*)"altd");
+  navMsg.vx 				= binn_object_float(obj, (char*)"vx");
+  navMsg.vy 				= binn_object_float(obj, (char*)"vy");
+  navMsg.vz 				= binn_object_float(obj, (char*)"vz");
+  navMsg.ax 				= binn_object_float(obj, (char*)"ax");
+  navMsg.ay 				= binn_object_float(obj, (char*)"ay");
+  navMsg.az 				= binn_object_float(obj, (char*)"az");
+  navMsg.motor1 		= binn_object_uint32(obj, (char*)"motor1");
+  navMsg.motor2 		= binn_object_uint32(obj, (char*)"motor2");
+  navMsg.motor3 		= binn_object_uint32(obj, (char*)"motor3");
+  navMsg.motor4 		= binn_object_uint32(obj, (char*)"motor4");
+  navMsg.tm 				= binn_object_uint32(obj, (char*)"tm");
 
   //Send this message over on ROS Topic.
   navdataPub_.publish(navMsg);
@@ -371,7 +385,7 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
 //depending on the topic of the mqtt message that was received.
 void mqtt_bridge::on_message(const struct mosquitto_message *message)
 {
-  if(!strcmp(message->topic, "uas/uav1/navdata"))
+  /*if(!strcmp(message->topic, "uas/uav1/navdata"))
   {
     handleNavdata(message);
   }
@@ -384,6 +398,20 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
     handleCompressedImage(message);
   }
 	std::cout << "Received message with length: " << message->payloadlen << " on topic: " << message->topic << std::endl;
+	*/
+	if(!strcmp(message->topic, "/ardrone/navdata"))
+	{
+		handleNavdata(message);
+	}
+	else if(!strcmp(message->topic, "/ardrone/image"))
+	{
+		handleUncompressedImage(message);
+	}
+	else if(!strcmp(message->topic, "/ardrone/cmd_vel"))
+	{
+		handleCmdVel(message);
+	}
+
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
@@ -424,6 +452,7 @@ void mqtt_bridge::setupDelayFiles()
   videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 }
 
+/*
 //This function is called when a takeoff message is received over ROS topic. It publishes out the corresponding mqtt message.
 void mqtt_bridge::takeOffMessageCallback(const std_msgs::Empty &msg)
 {
@@ -518,6 +547,7 @@ void mqtt_bridge::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
     binn_free(obj);
   }
 }
+*/
 
 int main(int argc, char **argv)
 {
@@ -531,18 +561,18 @@ int main(int argc, char **argv)
 
   //Initialize different variables that are to be read from the parameter file.
   std::string broker = "localhost";
-  std::string takeOffMsgTopic = "/ardrone/takeoff";
-  std::string landMsgTopic = "/ardrone/land";
-  std::string resetMsgTopic = "/ardrone/reset";
-  std::string cmdVelMsgTopic = "/cmd_vel";
+  //std::string takeOffMsgTopic = "/ardrone/takeoff";
+  //std::string landMsgTopic = "/ardrone/land";
+  //std::string resetMsgTopic = "/ardrone/reset";
+  //std::string cmdVelMsgTopic = "/cmd_vel";
   int brokerPort = 1883;
 
   //Read the variables from the parameter launch file. If the variable is not mentioned
   //in the parameter launch file, the defaults defined above are used. 
-  nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/resetMsgTopic", resetMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/cmdVelMsgTopic", cmdVelMsgTopic);
+  //nodeHandle.getParam("/mqttReceiver/takeOffMsgTopic", takeOffMsgTopic);
+  //nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
+  //nodeHandle.getParam("/mqttReceiver/resetMsgTopic", resetMsgTopic);
+  //nodeHandle.getParam("/mqttReceiver/cmdVelMsgTopic", cmdVelMsgTopic);
   nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
   ros::param::get("/mqttReceiver/mqttBroker", broker);
 
@@ -560,10 +590,10 @@ int main(int argc, char **argv)
   //Here, we are subscribing to 4 ROS topics. These topics are published by tum_ardrone. Each topic is handled
   //by a separate callback which is the 3rd argument of the function calls below. On receipt of a message
   //the appropriate callback is called.
-  ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
-  ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
-  ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &mqtt_bridge::resetMessageCallback, mqttBridge);
-  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &mqtt_bridge::CmdVelCallback, mqttBridge);
+  //ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &mqtt_bridge::takeOffMessageCallback, mqttBridge);
+  //ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &mqtt_bridge::landMessageCallback, mqttBridge);
+  //ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &mqtt_bridge::resetMessageCallback, mqttBridge);
+  //ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &mqtt_bridge::CmdVelCallback, mqttBridge);
  
   /*****/
   //Get the variable from the parameter launch file whether or not to ouput delays to a file

@@ -667,9 +667,9 @@ int main(int argc, char **argv)
   //ros::Subscriber takeOffSub = nodeHandle.subscribe(takeOffMsgTopic, 1000, &MQTTSender::takeOffMessageCallback, mqttSender);
   //ros::Subscriber landSub = nodeHandle.subscribe(landMsgTopic, 1000, &MQTTSender::landMessageCallback, mqttSender);
   //ros::Subscriber resetSub = nodeHandle.subscribe(resetMsgTopic, 1000, &MQTTSender::resetMessageCallback, mqttSender);
-  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1, &MQTTSender::CmdVelCallback, mqttSender);
-	ros::Subscriber image_sub = nodeHandle.subscribe(imageMsgTopic, 1, &MQTTSender::imageMessageCallback, mqttSender);
-  ros::Subscriber navdata_sub = nodeHandle.subscribe(navdataMsgTopic, 1, &MQTTSender::navdataMessageCallback, mqttSender);
+  ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1000, &MQTTSender::CmdVelCallback, mqttSender);
+	ros::Subscriber image_sub = nodeHandle.subscribe(imageMsgTopic, 1000, &MQTTSender::imageMessageCallback, mqttSender);
+  ros::Subscriber navdata_sub = nodeHandle.subscribe(navdataMsgTopic, 1000, &MQTTSender::navdataMessageCallback, mqttSender);
  
   /*****/
   //Get the variable from the parameter launch file whether or not to ouput delays to a file

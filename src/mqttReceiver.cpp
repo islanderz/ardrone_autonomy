@@ -93,6 +93,17 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     //Variable to decide if delay files are to be written out.
     bool outputDelayFiles;
 
+		//bool pingAcknowledgementReceived;
+		
+
+		bool firstPingAcknowledged;
+		bool latestPingAcknowledged;
+		bool timeToSendNextPing;
+
+		uint32_t latestPingUsec;
+		uint32_t latestPingSec;
+		uint32_t latestPingID;
+
     //The constructor
     mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh);
 
@@ -168,6 +179,13 @@ mqtt_bridge::mqtt_bridge(const char *id, const char *host, int port, ros::NodeHa
   navdataCount = 0;
   videoCount = 0;
   outputDelayFiles = 0;
+
+	firstPingAcknowledged = false;
+	latestPingAcknowledged = false;
+
+	latestPingUsec = 0;
+	latestPingSec = 0;
+	latestPingID = 0;
     
   old_left_right = -10.0;
   old_front_back = -10.0;
@@ -385,8 +403,12 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
 //depending on the topic of the mqtt message that was received.
 void mqtt_bridge::on_message(const struct mosquitto_message *message)
 {
-  /*if(!strcmp(message->topic, "uas/uav1/navdata"))
-  {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	uint32_t now_sec = (uint32_t)tv.tv_sec;
+	uint32_t now_usec = (uint32_t)tv.tv_usec;
+	/*if(!strcmp(message->topic, "uas/uav1/navdata"))
+		{
     handleNavdata(message);
   }
   else if(!strcmp(message->topic, "uas/uav1/uncompressedImageStream"))
@@ -407,11 +429,34 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 	{
 		handleUncompressedImage(message);
 	}
-	else if(!strcmp(message->topic, "/ardrone/cmd_vel"))
+	//else if(!strcmp(message->topic, "/ardrone/cmd_vel"))
+//	{
+//		handleCmdVel(message);
+//	}
+	else if(!strcmp(message->topic, "SenderToReceiverPing"))
 	{
-		handleCmdVel(message);
-	}
+		if(!firstPingAcknowledged)
+		{
+			firstPingAcknowledged = true;
+			latestPingAcknowledged = true;
+		}
 
+
+		uint32_t thisMsgSec, thisMsgUsec, thisMsgID;
+		memcpy(&thisMsgSec, message->payload, sizeof(uint32_t));
+		memcpy(&thisMsgUsec, message->payload + sizeof(uint32_t), sizeof(uint32_t));
+		memcpy(&thisMsgID, message->payload + 2*sizeof(uint32_t), sizeof(uint32_t));
+
+		//std::cout << "Ack Received with ID: " << thisMsgID << " sec: " << thisMsgSec << " usec: " << thisMsgUsec << std::endl;
+		//std::cout << "Msg was send with ID: " << latestPingID << " sec: " << latestPingSec << " usec: " << latestPingUsec << std::endl;
+	
+
+		if(thisMsgID == latestPingID)
+		{
+			latestPingAcknowledged = true;
+		  std::cout << "Delay is: " << ((now_sec - thisMsgSec)*1000000L + now_usec) - thisMsgUsec << " ms\n";
+		}
+	}
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
@@ -631,6 +676,7 @@ int main(int argc, char **argv)
 	mqttBridge->subscribe(NULL, "/ardrone/image");
 	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
 	mqttBridge->subscribe(NULL, "/ardrone/navdata");
+	mqttBridge->subscribe(NULL, "SenderToReceiverPing");
 
   int rc;
 
@@ -645,9 +691,48 @@ int main(int argc, char **argv)
     //function defined for the mosquitto instance. The callback function handles different topics internally.
     rc = mqttBridge->loop();
 
-    //If the mqtt connection is giving any troubles. Try to reconnect.
-    if(rc){
-      mqttBridge->reconnect();
+    //If the first ping isnt acknowledged, keep pinging.
+		struct timeval tv;
+		gettimeofday(&tv, NULL);
+		uint32_t now_sec = (uint32_t)tv.tv_sec;
+		uint32_t now_usec = (uint32_t)tv.tv_usec;
+
+		if (((now_sec - mqttBridge->latestPingSec)*1000000L + now_usec) - mqttBridge->latestPingUsec > 1000)//1sec has passed since last ping
+		{
+			mqttBridge->timeToSendNextPing = true;
+			mqttBridge->latestPingID = mqttBridge->latestPingID + 1;
+		}
+
+
+		if(mqttBridge->timeToSendNextPing) //first ping has been acknowledged and the last ping has also been acknowledged. Send next ping.
+		{
+			//Extract the seconds and microseconds from the current time
+			mqttBridge->latestPingSec = (uint32_t)tv.tv_sec;
+			mqttBridge->latestPingUsec = (uint32_t)tv.tv_usec;
+
+			//Create a new buffer that we would send. 2 for time sec/usec and 1 for ID
+			uint8_t* bufToSend = (uint8_t*)malloc(3*sizeof(uint32_t));//
+
+			//Copy the fields to the buffer
+			memcpy(bufToSend, &mqttBridge->latestPingSec, sizeof(uint32_t));
+			memcpy(bufToSend + sizeof(uint32_t), &mqttBridge->latestPingUsec, sizeof(uint32_t));
+			memcpy(bufToSend + 2*sizeof(uint32_t), &mqttBridge->latestPingID, sizeof(uint32_t));
+
+
+			//Copy the microseconds field to the next 4 bytes
+			mqttBridge->publish(NULL, "ReceiverToSenderPing", 3*sizeof(uint32_t), bufToSend);
+
+
+			if(mqttBridge->latestPingID > 10000)
+			{
+				mqttBridge->latestPingID = 0;
+			}
+			mqttBridge->timeToSendNextPing = false;
+		}
+
+
+		if(rc){
+			mqttBridge->reconnect();
     }
   }
 

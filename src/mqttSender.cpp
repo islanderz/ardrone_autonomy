@@ -119,7 +119,12 @@ void MQTTSender::on_connect(int rc)
 //depending on the topic of the mqtt message that was received.
 void MQTTSender::on_message(const struct mosquitto_message *message)
 {
-	std::cout << "Received an MQTT message on topic: " << message->topic << " of " << message->payloadlen << " bytes\n";
+//	std::cout << "Received an MQTT message on topic: " << message->topic << " of " << message->payloadlen << " bytes\n";
+	if(!strcmp(message->topic,"ReceiverToSenderPing"))
+	{
+		publish(NULL, "SenderToReceiverPing", message->payloadlen, message->payload);
+	}
+
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
@@ -290,6 +295,7 @@ int main(int argc, char **argv)
     //Subscribe to each topic. On success the callback function on_subscribe(..) is called.
     mqttSender->subscribe(NULL, topicsList[i].c_str());
   }
+	mqttSender->subscribe(NULL, "ReceiverToSenderPing");
 
   int rc;
 

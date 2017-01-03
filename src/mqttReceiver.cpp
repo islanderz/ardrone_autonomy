@@ -104,6 +104,7 @@ class mqtt_bridge : public mosquittopp::mosquittopp
 		uint32_t latestPingUsec;
 		uint32_t latestPingSec;
 		uint32_t latestPingID;
+		boost::posix_time::ptime latestPosixTime;
 
     //The constructor
     mqtt_bridge(const char *id, const char *host, int port, ros::NodeHandle nh);
@@ -214,29 +215,6 @@ void mqtt_bridge::on_connect(int rc)
 }
 
 
-//The callback when mqtt receives a compressed images. There are several
-//errors in the uncompression, so this is temporarily being removed.
-/*
-void mqtt_bridge::handleCompressedImage(const struct mosquitto_message *message)
-{
-  std::cout << "Compressed Images aren't fully handled yet....\n";
-  
-  //unsigned long imgDataLen;
-  //uint8_t* imgData;
-  //imgData = new uint8_t[20*message->payloadlen];
-  //int ret_uncp = uncompress(imgData, &imgDataLen, (uint8_t*)message->payload, (unsigned long)message->payloadlen);
-  //if (ret_uncp == Z_MEM_ERROR){printf("ERROR: uncompression memory error\n");return;}
-  //else if (ret_uncp == Z_BUF_ERROR){printf("ERROR: uncompression buffer error\n");return;}
-  //else if (ret_uncp == Z_DATA_ERROR){printf("ERROR: uncompression data error\n");return;}
-  //else if (ret_uncp != Z_OK){printf("ERROR: uncompression error unknown\n");return;}
-
-  //std::cout << "Compressed images are not yet handled properly" << std::endl;
-
-  //std::cout << "Uncompressed from " << message->payloadlen << " to " << imgDataLen << " bytes" << std::endl;
-
-  return;
-}
-*/
 void mqtt_bridge::handleCmdVel(const struct mosquitto_message *message)
 {
 	ROS_INFO("not handling CmdVel Msg right now\n");
@@ -410,20 +388,6 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 	gettimeofday(&tv, NULL);
 	uint32_t now_sec = (uint32_t)tv.tv_sec;
 	uint32_t now_usec = (uint32_t)tv.tv_usec;
-	/*if(!strcmp(message->topic, "uas/uav1/navdata"))
-		{
-    handleNavdata(message);
-  }
-  else if(!strcmp(message->topic, "uas/uav1/uncompressedImageStream"))
-  {
-    handleUncompressedImage(message);
-  }
-  else if(!strcmp(message->topic, "uas/uav1/compressedImageStream"))
-  {
-    handleCompressedImage(message);
-  }
-	std::cout << "Received message with length: " << message->payloadlen << " on topic: " << message->topic << std::endl;
-	*/
 	if(!strcmp(message->topic, "/ardrone/navdata"))
 	{
 		handleNavdata(message);
@@ -432,10 +396,6 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 	{
 		handleUncompressedImage(message);
 	}
-	//else if(!strcmp(message->topic, "/ardrone/cmd_vel"))
-//	{
-//		handleCmdVel(message);
-//	}
 	else if(!strcmp(message->topic, "/mqtt/pings/response"))
 	{
 		if(!firstPingAcknowledged)
@@ -444,6 +404,7 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 			latestPingAcknowledged = true;
 		}
 
+		boost::posix_time::ptime thisPosixTime	= boost::posix_time::microsec_clock::local_time();
 
 		uint32_t thisMsgSec, thisMsgUsec, thisMsgID;
 		memcpy(&thisMsgSec, message->payload, sizeof(uint32_t));
@@ -451,14 +412,16 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 		memcpy(&thisMsgID, message->payload + 2*sizeof(uint32_t), sizeof(uint32_t));
 
 		//std::cout << "Ack Received with ID: " << thisMsgID << " sec: " << thisMsgSec << " usec: " << thisMsgUsec << std::endl;
+		boost::posix_time::time_duration diff = thisPosixTime - latestPosixTime;
+		std::cout << "MQTT ping Delay is: " << diff.total_milliseconds() << " ms" << std::endl;
 		//std::cout << "Msg was send with ID: " << latestPingID << " sec: " << latestPingSec << " usec: " << latestPingUsec << std::endl;
 	
 
-		if(thisMsgID == latestPingID)
-		{
+		//if(thisMsgID == latestPingID)
+		//{
 			latestPingAcknowledged = true;
-		  std::cout << "Delay is: " << ((now_sec - thisMsgSec)*1000000L + now_usec) - thisMsgUsec << " ms\n";
-		}
+		//  std::cout << "Delay is: " << ((now_sec - thisMsgSec)*1000000L + now_usec) - thisMsgUsec << " ms\n";
+	//	}
 	}
 }
 
@@ -504,13 +467,7 @@ void mqtt_bridge::mqttPingFunction()
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	//uint32_t now_sec = (uint32_t)tv.tv_sec;
-	//uint32_t now_usec = (uint32_t)tv.tv_usec;
 
-	//if (((now_sec - mqttBridge->latestPingSec)*1000000L + now_usec) - mqttBridge->latestPingUsec > 1000)//1sec has passed since last ping
-//	{
-//		mqttBridge->timeToSendNextPing = true;
-//	}
 
 	while(ros::ok())
 	{
@@ -518,6 +475,7 @@ void mqtt_bridge::mqttPingFunction()
 
 		latestPingSec = (uint32_t)tv.tv_sec;
 		latestPingUsec = (uint32_t)tv.tv_usec;
+		latestPosixTime	= boost::posix_time::microsec_clock::local_time();
 		uint8_t* bufToSend = (uint8_t*)malloc(3*sizeof(uint32_t));//
 		memcpy(bufToSend, &latestPingSec, sizeof(uint32_t));
 		memcpy(bufToSend + sizeof(uint32_t), &latestPingUsec, sizeof(uint32_t));

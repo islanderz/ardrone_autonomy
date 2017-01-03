@@ -78,15 +78,6 @@ class MQTTSender : public mosquittopp::mosquittopp
     //This is a callback for receiving an image msg over ROS. It is then sent over MQTT.
     void imageMessageCallback(const sensor_msgs::Image &msg);
     
-    //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
-    //void takeOffMessageCallback(const std_msgs::Empty &msg);
-    
-    //This is a callback for receiving a land message on ROS. It is then sent over MQTT to be received by the sdk.
-    //void landMessageCallback(const std_msgs::Empty &msg);
-    
-    //This is a callback for receiving a reset message on ROS. It is then sent over MQTT to be received by the sdk.
-    //void resetMessageCallback(const std_msgs::Empty &msg);
-
    // This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
     void CmdVelCallback(const geometry_msgs::TwistConstPtr &msg);
 };
@@ -125,7 +116,6 @@ void MQTTSender::on_message(const struct mosquitto_message *message)
 	{
 		publish(NULL, "/mqtt/pings/response", message->payloadlen, message->payload, 1);
 	}
-
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic

@@ -19,6 +19,7 @@
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
 #include "geometry_msgs/Twist.h"
+#include "boost/thread.hpp"
 #include <mosquittopp.h>
 #include <image_transport/image_transport.h>
 #include <sys/time.h>
@@ -120,9 +121,9 @@ void MQTTSender::on_connect(int rc)
 void MQTTSender::on_message(const struct mosquitto_message *message)
 {
 //	std::cout << "Received an MQTT message on topic: " << message->topic << " of " << message->payloadlen << " bytes\n";
-	if(!strcmp(message->topic,"ReceiverToSenderPing"))
+	if(!strcmp(message->topic,"/mqtt/pings/request"))
 	{
-		publish(NULL, "SenderToReceiverPing", message->payloadlen, message->payload);
+		publish(NULL, "/mqtt/pings/response", message->payloadlen, message->payload, 1);
 	}
 
 }
@@ -295,7 +296,7 @@ int main(int argc, char **argv)
     //Subscribe to each topic. On success the callback function on_subscribe(..) is called.
     mqttSender->subscribe(NULL, topicsList[i].c_str());
   }
-	mqttSender->subscribe(NULL, "ReceiverToSenderPing");
+	mqttSender->subscribe(NULL, "/mqtt/pings/request");
 
   int rc;
 

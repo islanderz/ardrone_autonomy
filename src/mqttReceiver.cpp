@@ -18,6 +18,7 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
+#include "boost/thread.hpp"
 #include "geometry_msgs/Twist.h"
 #include <mosquittopp.h>
 #include <image_transport/image_transport.h>
@@ -137,6 +138,8 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     void handleUncompressedImage(const struct mosquitto_message *message);
 
 		void handleCmdVel(const struct mosquitto_message *message);
+
+		void mqttPingFunction();
 
     //This is a callback for receiving a takeoff message on ROS. It is then sent over MQTT to be received by the sdk.
     //void takeOffMessageCallback(const std_msgs::Empty &msg);
@@ -433,7 +436,7 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 //	{
 //		handleCmdVel(message);
 //	}
-	else if(!strcmp(message->topic, "SenderToReceiverPing"))
+	else if(!strcmp(message->topic, "/mqtt/pings/response"))
 	{
 		if(!firstPingAcknowledged)
 		{
@@ -497,102 +500,43 @@ void mqtt_bridge::setupDelayFiles()
   videoFile << "MessageTime(s), ReceiveTime(s), Delay(s)" << std::endl;
 }
 
-/*
-//This function is called when a takeoff message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::takeOffMessageCallback(const std_msgs::Empty &msg)
+void mqtt_bridge::mqttPingFunction()
 {
-  ROS_INFO("I heard a takeoff Signal. Sending it out over MQTT.\n");
-  std::string takeOff = "takeoff1";
-  publish(NULL, "/ardrone/takeoff",  takeOff.length() , (const uint8_t *)takeOff.data());
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	//uint32_t now_sec = (uint32_t)tv.tv_sec;
+	//uint32_t now_usec = (uint32_t)tv.tv_usec;
+
+	//if (((now_sec - mqttBridge->latestPingSec)*1000000L + now_usec) - mqttBridge->latestPingUsec > 1000)//1sec has passed since last ping
+//	{
+//		mqttBridge->timeToSendNextPing = true;
+//	}
+
+	while(ros::ok())
+	{
+		latestPingID = latestPingID + 1;
+
+		latestPingSec = (uint32_t)tv.tv_sec;
+		latestPingUsec = (uint32_t)tv.tv_usec;
+		uint8_t* bufToSend = (uint8_t*)malloc(3*sizeof(uint32_t));//
+		memcpy(bufToSend, &latestPingSec, sizeof(uint32_t));
+		memcpy(bufToSend + sizeof(uint32_t), &latestPingUsec, sizeof(uint32_t));
+		memcpy(bufToSend + 2*sizeof(uint32_t), &latestPingID, sizeof(uint32_t));
+		publish(NULL, "/mqtt/pings/request", 3*sizeof(uint32_t), bufToSend, 1);
+		if(latestPingID > 10000)
+		{
+			latestPingID = 0;
+		}
+//		mqttBridge->timeToSendNextPing = false;
+
+		sleep(1);
+	}
+
+//	if(mqttBridge->timeToSendNextPing) //first ping has been acknowledged and the last ping has also been acknowledged. Send next ping.
+//	{
+//		//Extract the seconds and microseconds from the current time
+//	}
 }
-
-//This function is called when a land message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::landMessageCallback(const std_msgs::Empty &msg)
-{
-  ROS_INFO("I heard a land Signal. Sending it out over MQTT.\n");
-  std::string land = "land";
-  publish(NULL, "/ardrone/land",  land.length() , (const uint8_t *)land.data());
-}
-
-//This function is called when a reset message is received over ROS topic. It publishes out the corresponding mqtt message.
-void mqtt_bridge::resetMessageCallback(const std_msgs::Empty &msg)
-{
-  ROS_INFO("I heard a reset Signal. Sending it out over MQTT.\n");
-  std::string reset = "reset";
-  publish(NULL, "/ardrone/reset",  reset.length() , (const uint8_t *)reset.data());
-}
-
-//This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.
-//This message is usually sent by the tum_ardrone.
-void mqtt_bridge::CmdVelCallback(const geometry_msgs::TwistConstPtr &msg)
-{
-  //Code taken from CmdVelCallback in src/teleop_twist.cpp in the ardrone_autonomy package 
-  //Code also taken from updateTeleop function in src/teleop_twist.cpp
-
-//  ROS_INFO("I heard a cmd_vel Signal. Sending it out over MQTT.\n");
-  
-  //Check the bounds of the values are between -1 and 1. All other are out-of-range values.
-  float left_right = static_cast<float>(std::max(std::min(-msg->linear.y, 1.0), -1.0));
-  float front_back = static_cast<float>(std::max(std::min(-msg->linear.x, 1.0), -1.0));
-  float up_down = static_cast<float>(std::max(std::min(msg->linear.z, 1.0), -1.0));
-  float turn = static_cast<float>(std::max(std::min(-msg->angular.z, 1.0), -1.0));
-
-  //Check if commands have changed from the previous commands. 
-  bool is_changed = !(
-      (fabs(left_right - old_left_right) < _EPS) &&
-      (fabs(front_back - old_front_back) < _EPS) &&
-      (fabs(up_down - old_up_down) < _EPS) &&
-      (fabs(turn - old_turn) < _EPS));
-
-  // These lines are for testing, they should be moved to configurations
-  // Bit 0 of control_flag == 0: should we hover?
-  // Bit 1 of control_flag == 1: should we use combined yaw mode?
-
-  int32_t control_flag = 0x00;
-  int32_t combined_yaw = 0x00;
-
-  // Auto hover detection based on ~0 values for 4DOF cmd_vel
-  int32_t hover = (int32_t)
-    (
-     (fabs(left_right) < _EPS) &&
-     (fabs(front_back) < _EPS) &&
-     (fabs(up_down) < _EPS) &&
-     (fabs(turn) < _EPS) &&
-     // Set angular.x or angular.y to a non-zero value to disable entering hover
-     // even when 4DOF control command is ~0
-     (fabs(msg->angular.x) < _EPS) &&
-     (fabs(msg->angular.y) < _EPS));
-
-  control_flag |= ((1 - hover) << 0);
-  control_flag |= (combined_yaw << 1);
-  // ROS_INFO (">>> Control Flag: %d", control_flag);
-
-  old_left_right = left_right;
-  old_front_back = front_back;
-  old_up_down = up_down;
-  old_turn = turn;
-  // is_changed = true;
-  if ((is_changed) || (hover))
-  {
-    //If commands have changed or we are hovering, package data in a binn format and send it over MQTT
-
-    binn* obj;
-    obj = binn_object();
-
-    binn_object_set_int32(obj, "control_flag", control_flag);
-    binn_object_set_float(obj, "left_right", left_right);
-    binn_object_set_float(obj, "front_back", front_back);
-    binn_object_set_float(obj, "up_down", up_down);
-    binn_object_set_float(obj, "turn", turn);
-
-    //publish over the mqtt topic
-    publish(NULL, "/ardrone/cmd_vel", binn_size(obj), (const uint8_t *)binn_ptr(obj));
-
-    //free the binn object
-    binn_free(obj);
-  }
-}
-*/
 
 int main(int argc, char **argv)
 {
@@ -676,10 +620,11 @@ int main(int argc, char **argv)
 	mqttBridge->subscribe(NULL, "/ardrone/image");
 	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
 	mqttBridge->subscribe(NULL, "/ardrone/navdata");
-	mqttBridge->subscribe(NULL, "SenderToReceiverPing");
+	mqttBridge->subscribe(NULL, "/mqtt/pings/response",1);
 
   int rc;
 
+	boost::thread _mqttPingThread(&mqtt_bridge::mqttPingFunction, mqttBridge);
   //Now we have set everything up. We just need to loop around and act as the Bridge between ROS and MQTT.
   while(ros::ok()){
 
@@ -692,49 +637,15 @@ int main(int argc, char **argv)
     rc = mqttBridge->loop();
 
     //If the first ping isnt acknowledged, keep pinging.
-		struct timeval tv;
-		gettimeofday(&tv, NULL);
-		uint32_t now_sec = (uint32_t)tv.tv_sec;
-		uint32_t now_usec = (uint32_t)tv.tv_usec;
-
-		if (((now_sec - mqttBridge->latestPingSec)*1000000L + now_usec) - mqttBridge->latestPingUsec > 1000)//1sec has passed since last ping
-		{
-			mqttBridge->timeToSendNextPing = true;
-			mqttBridge->latestPingID = mqttBridge->latestPingID + 1;
-		}
-
-
-		if(mqttBridge->timeToSendNextPing) //first ping has been acknowledged and the last ping has also been acknowledged. Send next ping.
-		{
-			//Extract the seconds and microseconds from the current time
-			mqttBridge->latestPingSec = (uint32_t)tv.tv_sec;
-			mqttBridge->latestPingUsec = (uint32_t)tv.tv_usec;
-
-			//Create a new buffer that we would send. 2 for time sec/usec and 1 for ID
-			uint8_t* bufToSend = (uint8_t*)malloc(3*sizeof(uint32_t));//
-
-			//Copy the fields to the buffer
-			memcpy(bufToSend, &mqttBridge->latestPingSec, sizeof(uint32_t));
-			memcpy(bufToSend + sizeof(uint32_t), &mqttBridge->latestPingUsec, sizeof(uint32_t));
-			memcpy(bufToSend + 2*sizeof(uint32_t), &mqttBridge->latestPingID, sizeof(uint32_t));
-
-
-			//Copy the microseconds field to the next 4 bytes
-			mqttBridge->publish(NULL, "ReceiverToSenderPing", 3*sizeof(uint32_t), bufToSend);
-
-
-			if(mqttBridge->latestPingID > 10000)
-			{
-				mqttBridge->latestPingID = 0;
-			}
-			mqttBridge->timeToSendNextPing = false;
-		}
+		
 
 
 		if(rc){
 			mqttBridge->reconnect();
     }
   }
+
+	_mqttPingThread.join();
 
   ROS_INFO("Disconnecting MQTT....\n");
 

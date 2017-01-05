@@ -39,6 +39,9 @@ extern "C" {
 #include <cctype>
 #include <thread>
 #include <chrono>
+#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/posix_time/posix_time_io.hpp>
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -406,14 +409,24 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 
 		boost::posix_time::ptime thisPosixTime	= boost::posix_time::microsec_clock::local_time();
 
-		uint32_t thisMsgSec, thisMsgUsec, thisMsgID;
-		memcpy(&thisMsgSec, message->payload, sizeof(uint32_t));
-		memcpy(&thisMsgUsec, message->payload + sizeof(uint32_t), sizeof(uint32_t));
-		memcpy(&thisMsgID, message->payload + 2*sizeof(uint32_t), sizeof(uint32_t));
+		std::cout << "Localtime: " <<  boost::posix_time::to_simple_string(thisPosixTime) << std::endl;
 
+//		std::cout << "lateststr: " << str_time << std::endl;
+
+		uint32_t thisMsgSec, thisMsgUsec, thisMsgID;
+		//memcpy(&thisMsgSec, message->payload, sizeof(uint32_t));
+		//memcpy(&thisMsgUsec, message->payload + sizeof(uint32_t), sizeof(uint32_t));
+		char tempStr[27];
+
+		memcpy(tempStr, message->payload, 27/*str_time.length()*/);
+		memcpy(&thisMsgID, message->payload + 27/*str_time.length()*/, sizeof(uint32_t));
+
+		std::string str_time(tempStr);
+
+		std::cout << "fromMsgStr: " << str_time << std::endl;
 		//std::cout << "Ack Received with ID: " << thisMsgID << " sec: " << thisMsgSec << " usec: " << thisMsgUsec << std::endl;
-		boost::posix_time::time_duration diff = thisPosixTime - latestPosixTime;
-		std::cout << "MQTT ping Delay is: " << diff.total_milliseconds() << " ms" << std::endl;
+		boost::posix_time::time_duration diff = thisPosixTime - boost::posix_time::time_from_string(str_time);//`latestPosixTime;
+		std::cout << "MQTT ping Delay is: " << (float)diff.total_microseconds()/1000.0 << " ms" << std::endl;
 		//std::cout << "Msg was send with ID: " << latestPingID << " sec: " << latestPingSec << " usec: " << latestPingUsec << std::endl;
 	
 
@@ -476,11 +489,19 @@ void mqtt_bridge::mqttPingFunction()
 		latestPingSec = (uint32_t)tv.tv_sec;
 		latestPingUsec = (uint32_t)tv.tv_usec;
 		latestPosixTime	= boost::posix_time::microsec_clock::local_time();
-		uint8_t* bufToSend = (uint8_t*)malloc(3*sizeof(uint32_t));//
-		memcpy(bufToSend, &latestPingSec, sizeof(uint32_t));
-		memcpy(bufToSend + sizeof(uint32_t), &latestPingUsec, sizeof(uint32_t));
-		memcpy(bufToSend + 2*sizeof(uint32_t), &latestPingID, sizeof(uint32_t));
-		publish(NULL, "/mqtt/pings/request", 3*sizeof(uint32_t), bufToSend, 1);
+
+
+		  // ptime to string.
+		const std::string str_time = boost::posix_time::to_simple_string(latestPosixTime);
+
+	//	std::cout << "Time is: " << str_time << " of length: " << str_time.length() << std::endl;
+
+		uint8_t* bufToSend = (uint8_t*)malloc(str_time.length() + sizeof(uint32_t));//
+		memcpy(bufToSend, str_time.data(), str_time.length());
+		//memcpy(bufToSend + sizeof(uint32_t), &latestPingUsec, sizeof(uint32_t));
+		memcpy(bufToSend + str_time.length(), &latestPingID, sizeof(uint32_t));
+		publish(NULL, "/mqtt/pings/request", str_time.length() + sizeof(uint32_t), bufToSend, 1);
+		std::cout << "Sent with: " << str_time << std::endl;
 		if(latestPingID > 10000)
 		{
 			latestPingID = 0;

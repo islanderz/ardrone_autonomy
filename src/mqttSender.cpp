@@ -116,6 +116,8 @@ void MQTTSender::on_message(const struct mosquitto_message *message)
 	{
 		publish(NULL, "/mqtt/pings/response", message->payloadlen, message->payload, 1);
 	}
+
+	//delete message;
 }
 
 //Callback when the mosquitto library successfully subscribes to a topic
@@ -188,20 +190,26 @@ void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 	uint32_t useconds = (uint32_t)tv.tv_usec;
 
 	//Create a new buffer that we would send. It contains the image data + 8 bytes (4*2 for each seconds and microseconds addition)
-	uint8_t* bufWithTimestamp = (uint8_t*)malloc(sendDataSize + 8);
+	uint8_t* bufWithTimestamp = (uint8_t*)malloc(sendDataSize + 12);
 
 	//Copy the seconds field to the first 4 bytes
-	memcpy(bufWithTimestamp, &seconds, 4);
+	//memcpy(bufWithTimestamp, &seconds, 4);
+	memcpy(bufWithTimestamp, &msg.header.stamp.sec, 4);
 
 	//Copy the microseconds field to the next 4 bytes
-	memcpy(bufWithTimestamp + 4, &useconds, 4);
+	//memcpy(bufWithTimestamp + 4, &useconds, 4);
+	memcpy(bufWithTimestamp + 4, &msg.header.stamp.nsec, 4);
+	
+	memcpy(bufWithTimestamp + 8, &msg.header.seq, 4);
 
 	//Copy the image data in rest of the buffer
 //	memcpy(bufWithTimestamp + 8, msg.data.begin(), sendDataSize);
-	std::copy(msg.data.begin(), msg.data.end(), bufWithTimestamp + 8);
+	std::copy(msg.data.begin(), msg.data.end(), bufWithTimestamp + 12);
 
 	//Send the image buffer with Timestamp over MQTT.
-	publish(NULL, "/ardrone/image", sendDataSize + 8, bufWithTimestamp);
+	publish(NULL, "/ardrone/image", sendDataSize + 12, bufWithTimestamp);
+
+  free(bufWithTimestamp);
 }
 
 //This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.

@@ -230,6 +230,7 @@ void mqtt_bridge::handleCmdVel(const struct mosquitto_message *message)
 void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *message)
 {
   //Get the current time
+  sensor_msgs::Image image_msg;
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -237,13 +238,15 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
 
   uint32_t org_sec; //the seconds in the message
   uint32_t org_usec; //the microseconds in the message
-
+  uint32_t org_seq;
   //In the message that we received. We extract the first 4 and then the next 4 bytes into the time variables.
   //These calculations give us a warning because we are doing pointer arithmetic on void type pointer. But,
   //throughout systems sizeof(void) is returned as 1 and hence this should work well.
   //Quick solution is to cast as char* and then do arithmentic, but that seems not necessary
   memcpy(&org_sec, message->payload, 4);
   memcpy(&org_usec, message->payload + 4, 4);
+
+  memcpy(&org_seq, message->payload + 8, 4);
 
   //If we are writing delays to the output file. Do So.
   if(outputDelayFiles)
@@ -268,8 +271,11 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   /// 
 
   //Here we initialize the ROS Topic Image_Transport message that is to be sent out
-  sensor_msgs::Image image_msg;
-  image_msg.header.stamp = ros::Time::now();
+  //image_msg.header.stamp = ros::Time::now();
+	image_msg.header.stamp.sec = org_sec;
+	image_msg.header.stamp.nsec = org_usec;
+	image_msg.header.seq = org_seq;
+	image_msg.header.frame_id = "Camera";
 
   //We are hardcoding imageWidth and imageHeight values here since we aren't serializing the image data being sent from the sdk.
   uint32_t imageWidth = 640;
@@ -280,10 +286,10 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   image_msg.step = imageWidth * 3;
 
   //The imageData is contained after the 8th byte in the incoming message. First 8 bytes were time information.
-  uint8_t* imgData = (uint8_t*)(message->payload+8);
+  uint8_t* imgData = (uint8_t*)(message->payload+12);
 
   //The size of the image data is 8 less than the size of the incoming message. First 8 bytes were time information.
-  unsigned long imgDataLen = message->payloadlen - 8;
+  unsigned long imgDataLen = message->payloadlen - 12;
 
   //Resize the data in the ros topic image transport message.
   image_msg.data.resize(imgDataLen);

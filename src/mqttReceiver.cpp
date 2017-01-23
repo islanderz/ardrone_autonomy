@@ -16,6 +16,7 @@
  *******************************************************************************/
 
 #include "ros/ros.h"
+#include "ros/serialization.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
 #include "boost/thread.hpp"
@@ -231,6 +232,16 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
 {
   //Get the current time
   sensor_msgs::Image image_msg;
+
+  uint32_t file_size = message->payloadlen;
+  boost::shared_array<uint8_t> ibuffer(new uint8_t[file_size]);
+  ros::serialization::IStream istream(message->payload, file_size);
+  ros::serialization::deserialize(istream, image_msg);
+  imagePub_.publish(image_msg);
+  return;
+
+/*
+
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -306,10 +317,23 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
     std::cout << "Error in publishing image: Either imgData is NULL or the imgDataLen = 0" << std::endl;
   }
   return;
+  */
 }
 void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
 {
-  //Get the current time
+
+  ardrone_autonomy::Navdata navMsg;
+
+  uint32_t file_size = message->payloadlen;
+  boost::shared_array<uint8_t> ibuffer(new uint8_t[file_size]);
+  
+  ros::serialization::IStream istream(message->payload, file_size);
+  ros::serialization::deserialize(istream, navMsg);
+
+  navdataPub_.publish(navMsg);
+
+  return;
+/*
   struct timeval tv;
   gettimeofday(&tv, NULL);
 
@@ -320,7 +344,6 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   obj = binn_open(message->payload);
 
   //Intialize the navdata message contained that would be sent over on the ROS topic.
-  ardrone_autonomy::Navdata navMsg;
   navMsg.header.stamp = ros::Time::now();
 
   //Calculate the delay of the navdata message
@@ -387,6 +410,7 @@ void mqtt_bridge::handleNavdata(const struct mosquitto_message *message)
   binn_free(obj);
 
   return;
+  */
 }
 
 //When we receive a mqtt message, this callback is called. It just calls the responsible function

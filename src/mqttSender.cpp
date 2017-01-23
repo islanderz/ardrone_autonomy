@@ -16,6 +16,7 @@
  *******************************************************************************/
 
 #include "ros/ros.h"
+#include "ros/serialization.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Empty.h"
 #include "geometry_msgs/Twist.h"
@@ -126,9 +127,22 @@ void MQTTSender::on_subscribe(int mid, int qos_count, const int *granted_qos)
   printf("Subscription succeeded.\n");
 }
 
-void MQTTSender::navdataMessageCallback(const ardrone_autonomy::Navdata &msg)
+void MQTTSender::navdataMessageCallback(const ardrone_autonomy::Navdata& msg)
 {
-	binn* obj;
+
+//  std::ofstream ofs("/tmp/filename.txt", std::ios::out|std::ios::binary);
+
+  uint32_t serial_size = ros::serialization::serializationLength(msg);
+  boost::shared_array<uint8_t> obuffer(new uint8_t[serial_size]);
+
+  ros::serialization::OStream ostream(obuffer.get(), serial_size);
+  ros::serialization::serialize(ostream, msg);
+  publish(NULL, "/ardrone/navdata", serial_size, obuffer.get());
+	
+ 
+  return;
+/*
+  binn* obj;
 	obj = binn_object();
 
 	binn_object_set_uint32(obj, "batteryPercent", msg.batteryPercent);
@@ -174,9 +188,20 @@ void MQTTSender::navdataMessageCallback(const ardrone_autonomy::Navdata &msg)
 
 	// release the buffer
 	binn_free(obj);
+*/  
 }
 void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 {
+  uint32_t serial_size = ros::serialization::serializationLength(msg);
+  boost::shared_array<uint8_t> obuffer(new uint8_t[serial_size]);
+
+  ros::serialization::OStream ostream(obuffer.get(), serial_size);
+  ros::serialization::serialize(ostream, msg);
+
+	publish(NULL, "/ardrone/image", serial_size, obuffer.get());
+
+  return;
+/*
 	unsigned long sendDataSize = 0;
 
 	sendDataSize = msg.step * msg.height;
@@ -210,6 +235,7 @@ void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 	publish(NULL, "/ardrone/image", sendDataSize + 12, bufWithTimestamp);
 
   free(bufWithTimestamp);
+  */
 }
 
 //This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.

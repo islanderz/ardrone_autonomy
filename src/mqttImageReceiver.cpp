@@ -46,7 +46,7 @@ extern "C" {
 
 /////////////////////////////////////////////////////////////////////////////
 
-std::string CLIENTID("mqttReceiver");
+std::string CLIENTID("mqttImageReceiver");
 
 //Extend class mosquittopp from the /usr/include/mosquittopp.h file 
 //This class provides all the basic functions for mqtt and 
@@ -168,7 +168,7 @@ void mqtt_bridge::initPublishers()
   navdataPub_ = nh_.advertise<ardrone_autonomy::Navdata>("tum_ardrone/navdata", 200);
 
   //The publisher for ROS image messages on tum_ardrone/image
-  imagePub_ = it_.advertise("tum_ardrone/image", 10); 
+  imagePub_ = it_.advertise("tum_ardrone/image", 1); 
   
 	//cmdVelPub_ = it_.advertise("tum_ardrone/cmd", 10); 
 }
@@ -237,6 +237,9 @@ void mqtt_bridge::handleUncompressedImage(const struct mosquitto_message *messag
   boost::shared_array<uint8_t> ibuffer(new uint8_t[file_size]);
   ros::serialization::IStream istream(message->payload, file_size);
   ros::serialization::deserialize(istream, image_msg);
+
+ // std::cout << "Msg recd with seq: " << image_msg.header.seq << std::endl;
+
   imagePub_.publish(image_msg);
   return;
 
@@ -456,7 +459,7 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 //		std::cout << "fromMsgStr: " << str_time << std::endl;
 		//std::cout << "Ack Received with ID: " << thisMsgID << " sec: " << thisMsgSec << " usec: " << thisMsgUsec << std::endl;
 		boost::posix_time::time_duration diff = thisPosixTime - boost::posix_time::time_from_string(str_time);//`latestPosixTime;
-		std::cout << "MQTT ping Delay is: " << (float)diff.total_microseconds()/1000.0 << " ms" << std::endl;
+		//std::cout << "MQTT ping Delay is: " << (float)diff.total_microseconds()/1000.0 << " ms" << std::endl;
 		//std::cout << "Msg was send with ID: " << latestPingID << " sec: " << latestPingSec << " usec: " << latestPingUsec << std::endl;
 	
 
@@ -554,7 +557,7 @@ int main(int argc, char **argv)
   CLIENTID += std::to_string(rand());
 
   //Mandatory ROS INIT call for this file to be registered as a ROS NODE. 
-  ros::init(argc, argv, "mqttReceiver");
+  ros::init(argc, argv, "mqttImageReceiver");
   ros::NodeHandle nodeHandle;
 
   //Initialize different variables that are to be read from the parameter file.
@@ -571,8 +574,8 @@ int main(int argc, char **argv)
   //nodeHandle.getParam("/mqttReceiver/landMsgTopic", landMsgTopic);
   //nodeHandle.getParam("/mqttReceiver/resetMsgTopic", resetMsgTopic);
   //nodeHandle.getParam("/mqttReceiver/cmdVelMsgTopic", cmdVelMsgTopic);
-  nodeHandle.getParam("/mqttReceiver/mqttBrokerPort", brokerPort);
-  ros::param::get("/mqttReceiver/mqttBroker", broker);
+  nodeHandle.getParam("/mqttImageReceiver/mqttBrokerPort", brokerPort);
+  ros::param::get("/mqttImageReceiver/mqttBroker", broker);
 
   std::cout << "Connecting to " << broker << " at " << brokerPort << " port\n";
   
@@ -598,7 +601,7 @@ int main(int argc, char **argv)
   //If so, then setup the delay files and let the mqtt_bridge know that it needs to print values
   //to the files.
   bool delayFiles = false;
-  nodeHandle.getParam("/mqttReceiver/outputDelayFiles", delayFiles);
+  nodeHandle.getParam("/mqttImageReceiver/outputDelayFiles", delayFiles);
   std::cout << "\nOutputDealyFiles set to " << delayFiles << std::endl;
   if(delayFiles)
   {
@@ -613,7 +616,7 @@ int main(int argc, char **argv)
 
   //Get the list of topics to subscribe to from the launch file
   std::vector<std::string> topicsList;
-  ros::param::get("/mqttReceiver/topicsList",topicsList);
+  ros::param::get("/mqttImageReceiver/topicsList",topicsList);
 
   //Iterate over the topics list and subscribe to each.
   //Each successful subscribe should print a "Subscribe Succeeded" message.
@@ -627,13 +630,17 @@ int main(int argc, char **argv)
     mqttBridge->subscribe(NULL, topicsList[i].c_str());
   }
 	mqttBridge->subscribe(NULL, "/ardrone/image");
-	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
-	mqttBridge->subscribe(NULL, "/ardrone/navdata");
+//	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
+	//mqttBridge->subscribe(NULL, "/ardrone/navdata");
 	mqttBridge->subscribe(NULL, "/mqtt/pings/response",1);
 
   int rc;
 
-	boost::thread _mqttPingThread(&mqtt_bridge::mqttPingFunction, mqttBridge);
+  boost::thread _mqttPingThread(&mqtt_bridge::mqttPingFunction, mqttBridge);
+  //CORRECT THE JOIN ALSO
+
+  ros::Rate loop_rate(30);
+
   //Now we have set everything up. We just need to loop around and act as the Bridge between ROS and MQTT.
   while(ros::ok()){
 
@@ -652,6 +659,8 @@ int main(int argc, char **argv)
 		if(rc){
 			mqttBridge->reconnect();
     }
+
+    loop_rate.sleep();
   }
 
 	_mqttPingThread.join();

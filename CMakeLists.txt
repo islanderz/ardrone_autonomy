@@ -143,8 +143,11 @@ target_link_libraries(
 add_dependencies(ardrone_driver ardronelib ${PROJECT_NAME}_gencpp)
 
 
-add_executable(mqttReceiver src/mqttReceiver.cpp)
-target_link_libraries(mqttReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+add_executable(mqttNavdataReceiver src/mqttNavdataReceiver.cpp)
+target_link_libraries(mqttNavdataReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+
+add_executable(mqttImageReceiver src/mqttImageReceiver.cpp)
+target_link_libraries(mqttImageReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
 
 add_executable(mqttSender src/mqttSender.cpp)
 target_link_libraries(mqttSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)

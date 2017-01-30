@@ -639,7 +639,11 @@ int main(int argc, char **argv)
   boost::thread _mqttPingThread(&mqtt_bridge::mqttPingFunction, mqttBridge);
   //CORRECT THE JOIN ALSO
 
-  ros::Rate loop_rate(30);
+  int loop_rate = 60;
+  ros::param::get("/mqttImageReceiver/loop_rate",loop_rate);
+  ros::Rate rate(loop_rate);
+
+  std::cout << "Running with loop_rate: " << loop_rate << std::endl;
 
   //Now we have set everything up. We just need to loop around and act as the Bridge between ROS and MQTT.
   while(ros::ok()){
@@ -660,7 +664,7 @@ int main(int argc, char **argv)
 			mqttBridge->reconnect();
     }
 
-    loop_rate.sleep();
+    rate.sleep();
   }
 
 	_mqttPingThread.join();

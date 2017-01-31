@@ -149,8 +149,14 @@ target_link_libraries(mqttNavdataReceiver ${catkin_LIBRARIES} -lmosquittopp -lz 
 add_executable(mqttImageReceiver src/mqttImageReceiver.cpp)
 target_link_libraries(mqttImageReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
 
+add_executable(mqttCmdVelReceiver src/mqttCmdVelReceiver.cpp)
+target_link_libraries(mqttCmdVelReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+
 add_executable(mqttSender src/mqttSender.cpp)
 target_link_libraries(mqttSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+
+add_executable(mqttCmdVelSender src/mqttCmdVelSender.cpp)
+target_link_libraries(mqttCmdVelSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
 
 # roslint
 set(ROSLINT_CPP_OPTS "--filter=-runtime/references-runtime/threadsafe_fn")

@@ -81,6 +81,9 @@ class MQTTSender : public mosquittopp::mosquittopp
     
    // This is a callback for receiving a cmd_vel message on ROS. It is then sent over MQTT to be received by the sdk.
     void CmdVelCallback(const geometry_msgs::Twist &msg);
+    void resetCallback(const std_msgs::EmptyConstPtr);
+    void landCallback(const std_msgs::EmptyConstPtr);
+    void takeoffCallback(const std_msgs::EmptyConstPtr);
 };
 
 //The Constructor
@@ -240,6 +243,21 @@ void MQTTSender::imageMessageCallback(const sensor_msgs::Image &msg)
 
 //This function is called when a cmd_vel message is received over ROS topic. It publishes out the corresponding mqtt message.
 //This message is usually sent by the tum_ardrone.
+void MQTTSender::resetCallback(std_msgs::EmptyConstPtr)
+{
+  uint8_t dummy[2];dummy[0] = '#';dummy[1] = '#';
+  publish(NULL, "/ardrone/reset", 1, dummy);
+}
+void MQTTSender::takeoffCallback(std_msgs::EmptyConstPtr)
+{
+  uint8_t dummy[2];dummy[0] = '#';dummy[1] = '#';
+  publish(NULL, "/ardrone/takeoff", 1, dummy);
+}
+void MQTTSender::landCallback(std_msgs::EmptyConstPtr)
+{
+  uint8_t dummy[2];dummy[0] = '#';dummy[1] = '#';
+  publish(NULL, "/ardrone/land", 1, dummy);
+}
 void MQTTSender::CmdVelCallback(const geometry_msgs::Twist &msg)
 {
   uint32_t serial_size = ros::serialization::serializationLength(msg);
@@ -289,6 +307,9 @@ int main(int argc, char **argv)
 
 
   ros::Subscriber cmd_vel_sub = nodeHandle.subscribe(cmdVelMsgTopic, 1000, &MQTTSender::CmdVelCallback, mqttSender);
+  ros::Subscriber reset_sub = nodeHandle.subscribe("/ardrone/reset", 1000, &MQTTSender::resetCallback, mqttSender);
+  ros::Subscriber land_sub = nodeHandle.subscribe("/ardrone/land", 1000, &MQTTSender::landCallback, mqttSender);
+  ros::Subscriber takeoff_sub = nodeHandle.subscribe("/ardrone/takeoff", 1000, &MQTTSender::takeoffCallback, mqttSender);
  
   /*****/
   //Get the variable from the parameter launch file whether or not to ouput delays to a file

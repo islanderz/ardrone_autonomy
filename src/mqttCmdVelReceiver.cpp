@@ -67,6 +67,9 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     image_transport::Publisher imagePub_;
 
     ros::Publisher cmdVelPub_;
+    ros::Publisher resetPub_;
+    ros::Publisher landPub_;
+    ros::Publisher takeoffPub_;
 
 
     //Variables to calculate the delay of a message. 
@@ -143,6 +146,9 @@ class mqtt_bridge : public mosquittopp::mosquittopp
     void handleUncompressedImage(const struct mosquitto_message *message);
 
 		void handleCmdVel(const struct mosquitto_message *message);
+		void handleLand(const struct mosquitto_message *message);
+		void handleTakeoff(const struct mosquitto_message *message);
+		void handleReset(const struct mosquitto_message *message);
 
 		void mqttPingFunction();
 
@@ -171,6 +177,11 @@ void mqtt_bridge::initPublishers()
   imagePub_ = it_.advertise("tum_ardrone/image", 1); 
   
 	cmdVelPub_ = nh_.advertise<geometry_msgs::Twist>("tum_ardrone/cmd_vel", 1); 
+
+  landPub_ = nh_.advertise<std_msgs::Empty>("/ardrone/land", 1);
+  resetPub_ = nh_.advertise<std_msgs::Empty>("/ardrone/reset", 1);
+  takeoffPub_ = nh_.advertise<std_msgs::Empty>("/ardrone/takeoff", 1);
+
 }
 
 
@@ -442,9 +453,21 @@ void mqtt_bridge::on_message(const struct mosquitto_message *message)
 	{
 		handleUncompressedImage(message);
 	}
+	else if(!strcmp(message->topic, "/ardrone/reset"))
+	{
+		resetPub_.publish(std_msgs::Empty());
+	}
+	else if(!strcmp(message->topic, "/ardrone/land"))
+	{
+		landPub_.publish(std_msgs::Empty());
+	}
+	else if(!strcmp(message->topic, "/ardrone/takeoff"))
+	{
+		takeoffPub_.publish(std_msgs::Empty());
+	}
   else if(!strcmp(message->topic, "/ardrone/cmd_vel"))
   {
-    std::cout << "received mqtt cmd_vel msg\n";
+//    std::cout << "received mqtt cmd_vel msg\n";
     handleCmdVel(message);
   }
 	else if(!strcmp(message->topic, "/mqtt/pings/response"))
@@ -646,6 +669,9 @@ int main(int argc, char **argv)
   }
 	//mqttBridge->subscribe(NULL, "/ardrone/image");
  	mqttBridge->subscribe(NULL, "/ardrone/cmd_vel");
+ 	mqttBridge->subscribe(NULL, "/ardrone/takeoff");
+ 	mqttBridge->subscribe(NULL, "/ardrone/land");
+ 	mqttBridge->subscribe(NULL, "/ardrone/reset");
 //	mqttBridge->subscribe(NULL, "/ardrone/navdata");
 //	mqttBridge->subscribe(NULL, "/mqtt/pings/response",1);
 

@@ -142,21 +142,20 @@ target_link_libraries(
 
 add_dependencies(ardrone_driver ardronelib ${PROJECT_NAME}_gencpp)
 
-
 add_executable(mqttNavdataReceiver src/mqttNavdataReceiver.cpp)
-target_link_libraries(mqttNavdataReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+target_link_libraries(mqttNavdataReceiver ${catkin_LIBRARIES} -lmosquittopp)
 
 add_executable(mqttImageReceiver src/mqttImageReceiver.cpp)
-target_link_libraries(mqttImageReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+target_link_libraries(mqttImageReceiver ${catkin_LIBRARIES} -lmosquittopp)
 
 add_executable(mqttCmdVelReceiver src/mqttCmdVelReceiver.cpp)
-target_link_libraries(mqttCmdVelReceiver ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+target_link_libraries(mqttCmdVelReceiver ${catkin_LIBRARIES} -lmosquittopp)
 
 add_executable(mqttSender src/mqttSender.cpp)
-target_link_libraries(mqttSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+target_link_libraries(mqttSender ${catkin_LIBRARIES} -lmosquittopp)
 
 add_executable(mqttCmdVelSender src/mqttCmdVelSender.cpp)
-target_link_libraries(mqttCmdVelSender ${catkin_LIBRARIES} -lmosquittopp -lz -lbinn)
+target_link_libraries(mqttCmdVelSender ${catkin_LIBRARIES} -lmosquittopp)
 
 # roslint
 set(ROSLINT_CPP_OPTS "--filter=-runtime/references-runtime/threadsafe_fn")
